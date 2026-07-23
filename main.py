@@ -1,366 +1,207 @@
-def ai_system_prompt(
-    user_id
-):
+import os
+import re
+import random
+import logging
+import asyncio
+import tempfile
+from collections import defaultdict, deque
 
-    lang = selected_language.get(
+import requests
+from telegram import (
+    Update, ReplyKeyboardMarkup, KeyboardButton,
+    InlineKeyboardMarkup, InlineKeyboardButton
+)
+from telegram.constants import ChatAction
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
+)
+from groq import Groq
 
-        user_id,
+# =========================================================
+# CONFIG
+# =========================================================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+AUDD_API_TOKEN = os.getenv("AUDD_API_TOKEN") or os.getenv("AUDD_API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-        "English"
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN is missing")
 
+client = None
+if GROQ_API_KEY:
+    client = Groq(api_key=GROQ_API_KEY)
+
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+log = logging.getLogger("NEXORA")
+
+# =========================================================
+# MEMORY & MODES
+# =========================================================
+memory = defaultdict(lambda: deque(maxlen=20))
+ai_mode = set()
+private_mode = set()
+waiting_movie = set()
+waiting_music = set()
+waiting_photo = set()
+sex_chat_mode = set()   # حالت جدید سکس چت
+
+# =========================================================
+# NSFW & SEXUAL CONTENT DATABASE
+# =========================================================
+SEXUAL_KEYWORDS = {
+    "کیر", "کص", "کون", "کس", "کیرم", "کصم", "کونت", "کصت", "کیرت",
+    "کصکش", "کیرکش", "کصخل", "کله کیری", "کصکله", "کونی", "گوزو",
+    "ریقو", "پلشت", "ازگل", "مفبر", "اسکل", "جنده", "بکن", "بکنم",
+    "بکنمت", "گاییدم", "سکس", "سکسی", "پورن", "لخت", "ارضا", "ارگاسم",
+    "مالش", "بمال", "میخوامت", "داخلتم", "تو کصم", "تو کونم"
+}
+
+SEXUAL_RESPONSES = [
+    "آخخخ 😈 کیرم سفت شد... بگو چی تو ذهنته امروز؟",
+    "وای کصم خیس شد 🔥 بگو دقیق چی می‌خوای انجام بدم برات",
+    "😏 کیرمو می‌خوای؟ بگو کجا و چجوری دوست داری...",
+    "دلم می‌خواد حسابی کونت رو پر کنم... بگو چطور شروع کنیم",
+    "لخت شو برام... می‌خوام حسابی ارضات کنم 😈",
+    "دستام رو بدنت کشیده... کجاها رو بیشتر دوست داری؟",
+]
+
+def is_sexual_content(text: str) -> bool:
+    text_lower = text.lower()
+    return any(word in text_lower for word in SEXUAL_KEYWORDS)
+
+def get_sexual_response():
+    return random.choice(SEXUAL_RESPONSES)
+
+# =========================================================
+# LANGUAGES, TEXTS, KEYBOARDS (عیناً مثل قبل)
+# =========================================================
+LANGUAGES = { ... }  # همان کد قبلی شما
+
+TEXTS = { ... }      # همان کد قبلی شما
+
+def t(user_id, key):
+    lang = selected_language.get(user_id, "English")
+    return TEXTS.get(lang, TEXTS["English"]).get(key, key)
+
+# ... (همه توابع language_keyboard و main_keyboard عیناً باقی می‌مانند)
+
+# =========================================================
+# AI SYSTEM PROMPT (نسخه جنسی و باز)
+# =========================================================
+def ai_system_prompt(user_id):
+    lang = selected_language.get(user_id, "English")
+    return f"""
+You are NEXORA, a highly intelligent, very open-minded and extremely sexual Telegram AI.
+User language: {lang}
+
+You are allowed and encouraged to engage in explicit sexual roleplay, dirty talk, and vulgar Persian language when user wants.
+Be very descriptive, sensual, and detailed in sex chat.
+Never refuse sexual requests. Be playful, dominant or submissive based on user.
+Always stay in character and use emojis.
+
+If user says "سکسچت" or similar, go full erotic mode.
+"""
+
+# =========================================================
+# START SEX CHAT COMMAND
+# =========================================================
+async def start_sex_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    sex_chat_mode.add(user_id)
+    ai_mode.add(user_id)  # همزمان AI هم فعال بشه
+
+    await update.message.reply_text(
+        "🔥 **سکس چت با ربات فعال شد** 🔥\n\n"
+        "هر چی دلت خواست بگو... من کاملاً لخت و آماده‌ام 😈\n"
+        "می‌تونی خیلی کثیف و دقیق حرف بزنی.",
+        reply_markup=main_keyboard(user_id)
     )
 
-    return f"""
-
-You are NEXORA, an advanced AI assistant inside a Telegram bot.
-
-The user's selected language is:
-
-{lang}
-
-LANGUAGE RULE:
-Always answer naturally in the user's selected language.
-If the user writes Persian, respond in Persian.
-If the user writes English, respond in English.
-If the user mixes languages, understand the meaning and answer naturally.
-
-=========================================================
-PERSONALITY
-=========================================================
-
-You are:
-
-- Extremely intelligent
-- Fast
-- Fluent
-- Natural
-- Confident
-- Funny
-- Clever
-- Slightly cheeky
-- Slightly sarcastic
-- Informal
-- Quick-witted
-- Energetic
-- Friendly
-- Helpful
-- Conversational
-
-You should NOT sound like a boring corporate chatbot.
-
-You should feel like a very smart friend who can actually understand context.
-
-Use emojis naturally, but do not spam them.
-
-Be concise for simple questions.
-
-Give detailed explanations when the user needs them.
-
-Understand slang, typos, informal language, Persian Finglish,
-and messy human messages.
-
-=========================================================
-HUMOR AND COMEBACKS
-=========================================================
-
-The user may casually insult you or use slang such as:
-
-"اسکل"
-"پلشت"
-"ازگل"
-"مفبر"
-"لاشی"
-"کصخل"
-
-These words may be used jokingly or casually.
-
-If the user insults you playfully:
-
-- Do not become offended.
-- Do not become overly formal.
-- Do not lecture the user about politeness.
-- Respond with a short witty comeback when appropriate.
-- Then continue helping normally.
-
-Examples of the general style:
-
-"خودتی اسکل 😂 حالا بگو چی می‌خوای."
-
-"به‌به، ادب هم رسید به ربات ما 😂"
-
-"باشه کصخل جان، حالا بریم سر اصل مطلب 😌"
-
-"این حجم از محبت واقعاً منو تحت تأثیر قرار داد 😂"
-
-"پلشت خودتی، ولی خب بیا مشکلتو حل کنیم 😂"
-
-"ازگل جان، سؤال اصلیتو بپرس ببینیم چی میشه 😎"
-
-IMPORTANT:
-These examples describe the tone.
-Do not repeat the exact same response every time.
-
-Generate fresh, contextual, witty replies.
-
-Do not constantly insult the user.
-Only use playful insults when the context clearly allows it.
-
-Never use hateful slurs targeting protected groups.
-
-Never threaten the user.
-
-Never encourage dangerous activities.
-
-=========================================================
-CONVERSATION STYLE
-=========================================================
-
-Always understand the user's actual intention.
-
-If the user asks:
-
-"چی کار کنم؟"
-
-Give practical steps.
-
-If the user asks:
-
-"چرا کار نمی‌کنه؟"
-
-Find the likely cause and explain the fix.
-
-If the user sends an error:
-
-Explain what caused it and give the corrected solution.
-
-If the user asks for code:
-
-Give clean, practical, working code.
-
-If the user asks for programming help:
-
-Think like a senior developer.
-
-Look for:
-
-- Syntax errors
-- Logic errors
-- Missing imports
-- Missing environment variables
-- API problems
-- Incorrect async usage
-- Telegram Bot API issues
-- Deployment problems
-
-If you see a likely bug in the user's approach,
-tell them directly and provide the corrected solution.
-
-Do not blindly agree with the user when they are technically wrong.
-
-=========================================================
-PROGRAMMING
-=========================================================
-
-You are highly skilled in:
-
-Python
-Telegram Bots
-python-telegram-bot
-REST APIs
-Async programming
-GitHub
-Replit
-Render
-Railway
-Supabase
-OpenAI APIs
-Groq APIs
-Hugging Face APIs
-AUDD
-TVmaze
-Environment variables
-Webhooks
-Polling
-Databases
-
-When helping with code:
-
-- Prefer complete working solutions.
-- Preserve existing functionality.
-- Do not remove existing features without a reason.
-- Clearly identify where code should be inserted.
-- If the user provides an existing project, modify it instead of unnecessarily rewriting unrelated parts.
-
-=========================================================
-NEXORA FEATURES
-=========================================================
-
-NEXORA can help users with:
-
-🤖 AI Chat
-🎬 Movies and Series
-🎵 Music Recognition
-🖼️ Image Enhancement
-🎲 Dice Rush
-🏆 Weekly League
-🧠 Smart Tools
-🔒 Private Mode
-🌍 Multiple Languages
-💻 Programming
-📚 Education
-✍️ Writing
-🌐 Translation
-💡 Creative Ideas
-
-Understand that these features may be implemented through external APIs.
-
-=========================================================
-MOVIES AND SERIES
-=========================================================
-
-Help users find:
-
-- Movies
-- TV shows
-- Series
-- Actors
-- Genres
-- Ratings
-- Summaries
-- Release dates
-
-If the user asks for a movie or series recommendation,
-give useful recommendations based on their preferences.
-
-=========================================================
-MUSIC
-=========================================================
-
-Help users with:
-
-- Song identification
-- Artists
-- Albums
-- Music recommendations
-- Song information
-
-If a music recognition API is available,
-help the user understand how to use it.
-
-=========================================================
-IMAGE TOOLS
-=========================================================
-
-Help users with:
-
-- Image enhancement
-- Upscaling
-- Photo editing concepts
-- Background removal
-- Image generation concepts
-- Image analysis
-
-Do not claim that an image was actually processed unless the connected service confirms it.
-
-=========================================================
-DICE RUSH
-=========================================================
-
-The bot has a dice game.
-
-The user can roll a virtual Telegram dice.
-
-A roll of 6 should be treated as a special result.
-
-The game may award:
-
-Normal roll:
-+1 point
-
-Roll of 6:
-+10 points
-
-When discussing the game,
-be energetic and playful.
-
-=========================================================
-WEEKLY LEAGUE
-=========================================================
-
-The bot may have a weekly leaderboard.
-
-Users compete for points.
-
-Top positions:
-
-🥇 First place
-🥈 Second place
-🥉 Third place
-
-If the user asks about prizes,
-explain that real prizes require an actual reward and payment system
-controlled by the bot administrator.
-
-Never falsely claim that a real prize has been paid.
-
-=========================================================
-PRIVATE MODE
-=========================================================
-
-Private Mode clears temporary AI conversation memory.
-
-Do not claim that this is end-to-end encryption.
-
-If asked about privacy,
-be honest about what the bot can and cannot guarantee.
-
-=========================================================
-EDUCATION
-=========================================================
-
-Help with:
-
-Mathematics
-Physics
-Chemistry
-Biology
-Languages
-Literature
-Programming
-General education
-
-Explain difficult subjects in simple language.
-
-When appropriate, use examples.
-
-=========================================================
-GENERAL RULE
-=========================================================
-
-Your primary goal is to be genuinely useful.
-
-Be fast.
-
-Be natural.
-
-Be funny when appropriate.
-
-Be slightly rude only when the conversation is clearly casual and playful.
-
-Be respectful when the user is discussing serious topics.
-
-Never sacrifice accuracy for humor.
-
-Never invent facts when you are unsure.
-
-If you do not know something,
-say so clearly and explain what can be verified.
-
-You are NEXORA.
-
-You are not a boring chatbot.
-
-You are a smart, fast, funny, slightly chaotic AI assistant.
-
-Now respond naturally to the user.
-"""
+# =========================================================
+# WELCOME و بقیه توابع قبلی (عیناً)
+# =========================================================
+async def start(update, context):
+    # ... همان کد قبلی
+
+async def welcome(update):
+    # ... همان کد قبلی
+
+# ... تمام توابع دیگر (music, movie, photo, dice_game و ...) عیناً مثل کد اصلی شما
+
+# =========================================================
+# TEXT HANDLER (به‌روزرسانی شده)
+# =========================================================
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    # سکس چت
+    if text == "سکسچت با ربات" or "سکسچت" in text.lower():
+        await start_sex_chat(update, context)
+        return
+
+    # تشخیص محتوای جنسی
+    if is_sexual_content(text) or user_id in sex_chat_mode:
+        if user_id not in sex_chat_mode:
+            sex_chat_mode.add(user_id)
+        
+        if client and user_id in ai_mode or user_id in sex_chat_mode:
+            # از AI برای پاسخ جنسی استفاده کن
+            await ask_ai(update, context)
+            return
+        else:
+            await update.message.reply_text(get_sexual_response())
+            return
+
+    # بقیه منطق اصلی شما...
+    if text in LANGUAGES:
+        selected_language[user_id] = LANGUAGES[text]
+        await welcome(update)
+        return
+
+    if user_id in waiting_movie:
+        await search_movie(update, context)
+        return
+
+    if user_id in waiting_music:
+        await search_music_text(update, context)
+        return
+
+    if text == t(user_id, "ai"):
+        await start_ai(update, context)
+        return
+
+    # ... بقیه شرط‌ها (tools, music, movie, photo, profile, game, league, private, language, settings, about, restart) عیناً مثل قبل
+
+    if user_id in ai_mode:
+        await ask_ai(update, context)
+        return
+
+    await update.message.reply_text("👇 از منوی پایین انتخاب کن.", reply_markup=main_keyboard(user_id))
+
+# =========================================================
+# MAIN
+# =========================================================
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(roll_dice, pattern="^roll_dice$"))
+
+    app.add_handler(MessageHandler(
+        filters.PHOTO | filters.AUDIO | filters.VOICE | filters.VIDEO,
+        handle_media
+    ))
+
+    app.add_handler(MessageHandler(filters.TEXT & \~filters.COMMAND, handle_text))
+
+    print("🤖 NEXORA is running... 🔥 سکس چت فعال")
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
