@@ -6,18 +6,15 @@ from telegram import (
     Update,
     ReplyKeyboardMarkup,
     KeyboardButton,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
 )
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     ContextTypes,
     filters,
 )
-from openai import OpenAI
+from groq import Groq
 
 
 # ═══════════════════════════════════════
@@ -30,21 +27,21 @@ logging.basicConfig(
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN تنظیم نشده است")
 
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY تنظیم نشده است")
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY تنظیم نشده است")
 
-client = OpenAI(
-    api_key=OPENAI_API_KEY
+client = Groq(
+    api_key=GROQ_API_KEY
 )
 
 
 # ═══════════════════════════════════════
-# 🧠 حافظه کاربران
+# 🧠 حافظه
 # ═══════════════════════════════════════
 
 ai_memory = defaultdict(
@@ -53,11 +50,7 @@ ai_memory = defaultdict(
 
 ai_mode = set()
 
-# زبان کاربران
 user_languages = {}
-
-# پروفایل کاربران
-user_profiles = {}
 
 
 # ═══════════════════════════════════════
@@ -65,102 +58,47 @@ user_profiles = {}
 # ═══════════════════════════════════════
 
 LANGUAGES = {
-    "fa": "🇮🇷 فارسی",
-    "en": "🇬🇧 English",
-    "ar": "🇸🇦 العربية",
-    "tr": "🇹🇷 Türkçe",
-    "ru": "🇷🇺 Русский",
-    "es": "🇪🇸 Español",
-    "fr": "🇫🇷 Français",
-    "de": "🇩🇪 Deutsch",
-    "hi": "🇮🇳 हिन्दी",
-    "zh": "🇨🇳 中文",
+    "🇬🇧 English": "English",
+    "🇮🇷 فارسی": "Persian",
+    "🇸🇦 العربية": "Arabic",
+    "🇪🇸 Español": "Spanish",
+    "🇫🇷 Français": "French",
+    "🇩🇪 Deutsch": "German",
+    "🇷🇺 Русский": "Russian",
+    "🇹🇷 Türkçe": "Turkish",
+    "🇮🇳 हिन्दी": "Hindi",
+    "🇨🇳 中文": "Chinese",
 }
 
-
-# ═══════════════════════════════════════
-# 📝 متن‌های زبان
-# ═══════════════════════════════════════
-
-TEXTS = {
-
-    "en": {
-        "welcome": "✨ Welcome {name}! 🤖\n\nI'm your smart AI assistant.\n\n💬 Chat with AI\n🧠 Ask questions\n📚 Learn and study\n💻 Programming help\n🎵 Music assistance\n🎬 Movie discovery\n🖼️ Image assistance\n🔗 Link analysis\n✍️ Writing and translation\n💡 Ideas and creativity\n\n🌍 Please choose your language to continue:",
-        "profile": "👤 Your Profile\n\n🆔 User ID: {id}\n🌍 Language: {language}\n💬 AI chats: {chats}\n\n✨ Your smart assistant profile",
-        "language_changed": "✅ Language changed successfully!",
-        "choose_language": "🌍 Choose your language:",
-        "ai_ready": "🤖 AI Assistant is ready!\n\nSend me anything you want to ask.",
-        "restart": "🔄 Welcome back, {name}!",
-    },
-
-    "fa": {
-        "welcome": "✨ سلام {name}! 🤖\n\nبه دستیار هوشمند همه‌کاره خوش اومدی! 🚀\n\n💬 گفت‌وگوی هوشمند\n🧠 پاسخ به سؤالات\n📚 کمک در درس و تحقیق\n💻 برنامه‌نویسی\n🎵 کمک برای موسیقی\n🎬 پیدا کردن فیلم\n🖼️ کمک در زمینه عکس\n🔗 تحلیل لینک\n✍️ نوشتن و ترجمه\n💡 ایده‌پردازی\n\n🌍 زبانت رو انتخاب کن:",
-        "profile": "👤 پروفایل من\n\n🆔 شناسه: {id}\n🌍 زبان: {language}\n💬 تعداد گفتگوهای AI: {chats}\n\n✨ پروفایل دستیار هوشمند شما",
-        "language_changed": "✅ زبان با موفقیت تغییر کرد!",
-        "choose_language": "🌍 زبان موردنظرت رو انتخاب کن:",
-        "ai_ready": "🤖 دستیار هوشمند آماده‌ست!\n\nهر چیزی می‌خوای بپرس، من در خدمتم. ✨",
-        "restart": "🔄 خوش برگشتی {name}!",
-    },
-
-    "ar": {
-        "welcome": "✨ مرحباً {name}! 🤖\n\nأنا مساعدك الذكي متعدد الاستخدامات! 🚀\n\n💬 محادثة ذكية\n🧠 الإجابة على الأسئلة\n📚 المساعدة في الدراسة\n💻 البرمجة\n🎵 الموسيقى\n🎬 الأفلام\n🖼️ الصور\n🔗 تحليل الروابط\n✍️ الكتابة والترجمة\n💡 الأفكار والإبداع\n\n🌍 اختر لغتك:",
-        "profile": "👤 ملفك الشخصي\n\n🆔 المعرف: {id}\n🌍 اللغة: {language}\n💬 محادثات AI: {chats}",
-        "language_changed": "✅ تم تغيير اللغة بنجاح!",
-        "choose_language": "🌍 اختر لغتك:",
-        "ai_ready": "🤖 المساعد الذكي جاهز!\n\nأرسل لي أي سؤال.",
-        "restart": "🔄 أهلاً بعودتك {name}!",
-    },
-}
-
-
-# ═══════════════════════════════════════
-# 🌍 دریافت زبان کاربر
-# ═══════════════════════════════════════
-
-def get_language(user_id):
-
-    return user_languages.get(
-        user_id,
-        "en"
-    )
-
-
-def get_text(user_id, key):
-
-    lang = get_language(user_id)
-
-    language_texts = TEXTS.get(
-        lang,
-        TEXTS["en"]
-    )
-
-    return language_texts.get(
-        key,
-        TEXTS["en"].get(key, "")
-    )
-
-
-# ═══════════════════════════════════════
-# 🌍 منوی انتخاب زبان
-# ═══════════════════════════════════════
 
 def language_keyboard():
 
-    buttons = []
+    keyboard = [
+        [
+            KeyboardButton("🇬🇧 English"),
+            KeyboardButton("🇮🇷 فارسی"),
+        ],
+        [
+            KeyboardButton("🇸🇦 العربية"),
+            KeyboardButton("🇪🇸 Español"),
+        ],
+        [
+            KeyboardButton("🇫🇷 Français"),
+            KeyboardButton("🇩🇪 Deutsch"),
+        ],
+        [
+            KeyboardButton("🇷🇺 Русский"),
+            KeyboardButton("🇹🇷 Türkçe"),
+        ],
+        [
+            KeyboardButton("🇮🇳 हिन्दी"),
+            KeyboardButton("🇨🇳 中文"),
+        ],
+    ]
 
-    for code, name in LANGUAGES.items():
-
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    name,
-                    callback_data=f"lang_{code}"
-                )
-            ]
-        )
-
-    return InlineKeyboardMarkup(
-        buttons
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True
     )
 
 
@@ -168,69 +106,36 @@ def language_keyboard():
 # 🎨 منوی اصلی
 # ═══════════════════════════════════════
 
-def main_keyboard(user_id):
+def main_keyboard():
 
-    lang = get_language(user_id)
+    keyboard = [
 
-    if lang == "fa":
+        [
+            KeyboardButton("🤖 AI Chat"),
+            KeyboardButton("🧠 Smart Tools"),
+        ],
 
-        keyboard = [
+        [
+            KeyboardButton("🎵 Music Finder"),
+            KeyboardButton("🎬 Movie Finder"),
+        ],
 
-            [
-                KeyboardButton("🤖 گفت‌وگو با AI"),
-                KeyboardButton("🧠 ابزارهای هوشمند"),
-            ],
+        [
+            KeyboardButton("🖼️ Improve Photo"),
+            KeyboardButton("🔗 Analyze Link"),
+        ],
 
-            [
-                KeyboardButton("👤 پروفایل من"),
-                KeyboardButton("🌍 تغییر زبان"),
-            ],
+        [
+            KeyboardButton("👤 My Profile"),
+            KeyboardButton("🌍 Change Language"),
+        ],
 
-            [
-                KeyboardButton("🎵 تشخیص آهنگ"),
-                KeyboardButton("🎬 پیدا کردن فیلم"),
-            ],
+        [
+            KeyboardButton("ℹ️ About"),
+            KeyboardButton("🔄 Restart"),
+        ],
 
-            [
-                KeyboardButton("🖼️ بهبود عکس"),
-                KeyboardButton("🔗 تحلیل لینک"),
-            ],
-
-            [
-                KeyboardButton("🔄 شروع دوباره"),
-            ],
-
-        ]
-
-    else:
-
-        keyboard = [
-
-            [
-                KeyboardButton("🤖 Chat with AI"),
-                KeyboardButton("🧠 Smart Tools"),
-            ],
-
-            [
-                KeyboardButton("👤 My Profile"),
-                KeyboardButton("🌍 Change Language"),
-            ],
-
-            [
-                KeyboardButton("🎵 Music Finder"),
-                KeyboardButton("🎬 Movie Finder"),
-            ],
-
-            [
-                KeyboardButton("🖼️ Image Tools"),
-                KeyboardButton("🔗 Link Analysis"),
-            ],
-
-            [
-                KeyboardButton("🔄 Restart"),
-            ],
-
-        ]
+    ]
 
     return ReplyKeyboardMarkup(
         keyboard,
@@ -248,139 +153,96 @@ async def start(
 ):
 
     user = update.effective_user
-
     user_id = user.id
 
-    if user_id not in user_profiles:
+    if user_id not in user_languages:
 
-        user_profiles[user_id] = {
-            "name": user.first_name or "User",
-            "chats": 0,
-        }
+        await update.message.reply_text(
 
-    text = get_text(
-        user_id,
-        "welcome"
-    ).format(
-        name=user.first_name or "Friend"
-    )
+            "✨ Welcome! 🤖\n\n"
+            "I'm your smart all-in-one AI assistant.\n\n"
 
-    await update.message.reply_text(
-        text,
-        reply_markup=language_keyboard()
-    )
+            "💬 AI conversations\n"
+            "🧠 Study and problem solving\n"
+            "✍️ Writing and translation\n"
+            "🎵 Music identification\n"
+            "🎬 Movie discovery\n"
+            "🖼️ Photo improvement\n"
+            "🔗 Link analysis\n"
+            "💻 Programming help\n"
+            "💡 Creative ideas\n\n"
 
+            "🌍 Please choose your language to continue:",
 
-# ═══════════════════════════════════════
-# 🌍 انتخاب زبان
-# ═══════════════════════════════════════
+            reply_markup=language_keyboard()
+        )
 
-async def language_callback(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
-
-    query = update.callback_query
-
-    await query.answer()
-
-    user_id = query.from_user.id
-
-    lang_code = query.data.replace(
-        "lang_",
-        ""
-    )
-
-    if lang_code not in LANGUAGES:
         return
 
-    user_languages[user_id] = lang_code
-
-    await query.edit_message_text(
-
-        get_text(
-            user_id,
-            "language_changed"
-        )
-
-    )
-
-    await context.bot.send_message(
-
-        chat_id=user_id,
-
-        text=get_text(
-            user_id,
-            "restart"
-        ).format(
-            name=query.from_user.first_name or "Friend"
-        ),
-
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+    await send_welcome(
+        update,
+        context
     )
 
 
 # ═══════════════════════════════════════
-# 👤 پروفایل جدید
+# 🌍 خوشامدگویی بر اساس زبان
 # ═══════════════════════════════════════
 
-async def profile(
+async def send_welcome(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
     user_id = update.effective_user.id
-
-    profile_data = user_profiles.get(
+    language = user_languages.get(
         user_id,
-        {
-            "name": update.effective_user.first_name or "User",
-            "chats": 0,
-        }
-    )
-
-    language = LANGUAGES.get(
-        get_language(user_id),
         "English"
     )
 
-    text = get_text(
-        user_id,
-        "profile"
-    ).format(
+    welcome_text = {
 
-        id=user_id,
+        "English":
+            "✨ Welcome to your Smart AI Assistant! 🤖\n\n"
+            "💬 Chat with AI\n"
+            "🧠 Solve problems and learn\n"
+            "✍️ Write, rewrite and translate\n"
+            "🎵 Find songs and music\n"
+            "🎬 Discover movies and series\n"
+            "🖼️ Improve and edit photos\n"
+            "🔗 Analyze links\n"
+            "💻 Programming assistance\n"
+            "💡 Creative ideas\n\n"
+            "🚀 Choose an option from the menu below.",
 
-        language=language,
+        "Persian":
+            "✨ به دستیار هوشمند همه‌کاره خوش اومدی! 🤖\n\n"
+            "💬 گفت‌وگو با هوش مصنوعی\n"
+            "🧠 حل مسئله و کمک درسی\n"
+            "✍️ نوشتن، بازنویسی و ترجمه\n"
+            "🎵 پیدا کردن آهنگ و موسیقی\n"
+            "🎬 پیدا کردن فیلم و سریال\n"
+            "🖼️ بهبود و ویرایش عکس\n"
+            "🔗 تحلیل لینک‌ها\n"
+            "💻 کمک در برنامه‌نویسی\n"
+            "💡 ایده‌پردازی و خلاقیت\n\n"
+            "🚀 از منوی پایین شروع کن.",
 
-        chats=profile_data.get(
-            "chats",
-            0
-        )
+    }
 
+    text = welcome_text.get(
+        language,
+        welcome_text["English"]
     )
 
     await update.message.reply_text(
-
-        "╭━━━━━━━━━━━━━━╮\n"
-        "      👤 PROFILE\n"
-        "╰━━━━━━━━━━━━━━╯\n\n"
-        + text
-        + "\n\n"
-        "✨ Your AI journey starts here.",
-
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+        text,
+        reply_markup=main_keyboard()
     )
 
 
 # ═══════════════════════════════════════
-# 🤖 شروع AI
+# 🤖 ورود به AI
 # ═══════════════════════════════════════
 
 async def start_ai(
@@ -390,28 +252,22 @@ async def start_ai(
 
     user_id = update.effective_user.id
 
-    ai_mode.add(
-        user_id
-    )
-
-    ai_memory[user_id].clear()
+    ai_mode.add(user_id)
 
     await update.message.reply_text(
 
-        get_text(
-            user_id,
-            "ai_ready"
-        ),
+        "🤖 AI Assistant\n\n"
+        "✨ I'm ready!\n\n"
+        "Send me any question or request.\n"
+        "You can ask about almost anything.\n\n"
+        "💡 Your conversation will be remembered temporarily.",
 
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+        reply_markup=main_keyboard()
     )
 
 
 # ═══════════════════════════════════════
-# 🧠 ارسال پیام به OpenAI
+# 🧠 اتصال به Groq
 # ═══════════════════════════════════════
 
 async def ask_ai(
@@ -420,24 +276,21 @@ async def ask_ai(
 ):
 
     user_id = update.effective_user.id
-
     text = update.message.text
 
     if not text:
         return
 
-    language = LANGUAGES.get(
-        get_language(user_id),
+    language = user_languages.get(
+        user_id,
         "English"
     )
 
     ai_memory[user_id].append(
-
         {
             "role": "user",
             "content": text
         }
-
     )
 
     messages = [
@@ -445,38 +298,39 @@ async def ask_ai(
         {
             "role": "system",
             "content": (
-                "You are a professional multilingual AI assistant. "
+                "You are a professional all-purpose AI assistant. "
                 f"The user's selected language is {language}. "
                 "Always answer in the user's selected language. "
-                "Be helpful, clear, friendly and concise. "
-                "You can help with education, programming, writing, "
-                "translation, movies, music, images, links and general questions."
+                "Be helpful, accurate, clear and concise. "
+                "Do not claim to have abilities or tools that you do not actually have."
             )
         }
 
     ]
 
     messages.extend(
-        list(
-            ai_memory[user_id]
-        )
+        list(ai_memory[user_id])
     )
 
     try:
 
-        response = client.responses.create(
+        response = client.chat.completions.create(
 
-            model="gpt-4o-mini",
+            model="llama-3.1-8b-instant",
 
-            input=messages
+            messages=messages,
+
+            temperature=0.7,
+
+            max_tokens=2048
 
         )
 
-        answer = response.output_text
+        answer = response.choices[0].message.content
 
         if not answer:
 
-            answer = "❌ No response received."
+            answer = "Sorry, I couldn't generate a response."
 
         ai_memory[user_id].append(
 
@@ -487,43 +341,28 @@ async def ask_ai(
 
         )
 
-        if user_id in user_profiles:
-
-            user_profiles[user_id][
-                "chats"
-            ] += 1
-
         await update.message.reply_text(
-
             answer,
-
-            reply_markup=main_keyboard(
-                user_id
-            )
-
+            reply_markup=main_keyboard()
         )
 
     except Exception as error:
 
         logging.exception(
-            "OPENAI_ERROR"
+            "Groq Error"
         )
 
         await update.message.reply_text(
 
-            f"❌ OpenAI Error:\n\n"
-            f"{type(error).__name__}\n\n"
-            f"{str(error)}",
+            "❌ AI service error.\n\n"
+            "Please try again in a few moments.",
 
-            reply_markup=main_keyboard(
-                user_id
-            )
-
+            reply_markup=main_keyboard()
         )
 
 
 # ═══════════════════════════════════════
-# 🧠 ابزارهای هوشمند
+# 🧰 ابزارها
 # ═══════════════════════════════════════
 
 async def smart_tools(
@@ -531,29 +370,26 @@ async def smart_tools(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user_id = update.effective_user.id
-
     await update.message.reply_text(
 
         "🧠 Smart Tools\n\n"
+
         "🎵 Music identification\n"
         "🎬 Movie discovery\n"
-        "🖼️ Image assistance\n"
+        "🖼️ Photo improvement\n"
         "🔗 Link analysis\n"
-        "✍️ Writing and translation\n"
-        "💻 Programming\n"
-        "📚 Education\n\n"
-        "🚀 More tools coming soon!",
+        "✍️ Text processing\n"
+        "💻 Programming assistant\n"
+        "📚 Learning assistant\n\n"
 
-        reply_markup=main_keyboard(
-            user_id
-        )
+        "🚀 More tools are coming soon.",
 
+        reply_markup=main_keyboard()
     )
 
 
 # ═══════════════════════════════════════
-# 🎵 موسیقی
+# 🎵 آهنگ
 # ═══════════════════════════════════════
 
 async def music_finder(
@@ -561,18 +397,15 @@ async def music_finder(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user_id = update.effective_user.id
-
     await update.message.reply_text(
 
         "🎵 Music Finder\n\n"
-        "Send me the song name, artist or lyrics.\n\n"
-        "🔜 Audio/video recognition will be added with a music API.",
+        "Send me the song name, artist name, "
+        "lyrics or any information you remember.\n\n"
+        "🔜 Automatic music recognition from audio "
+        "and video can be added with a music recognition API.",
 
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+        reply_markup=main_keyboard()
     )
 
 
@@ -585,19 +418,17 @@ async def movie_finder(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user_id = update.effective_user.id
-
     await update.message.reply_text(
 
         "🎬 Movie Finder\n\n"
-        "Tell me anything you remember about the movie.\n"
-        "Name, actor, story or scene.\n\n"
-        "I'll help you find it.",
+        "Tell me anything you remember about the movie:\n\n"
+        "🎭 Actors\n"
+        "📖 Story\n"
+        "📅 Approximate year\n"
+        "🎞️ A scene\n\n"
+        "I'll help you identify it.",
 
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+        reply_markup=main_keyboard()
     )
 
 
@@ -610,22 +441,18 @@ async def improve_photo(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user_id = update.effective_user.id
-
     await update.message.reply_text(
 
-        "🖼️ Image Tools\n\n"
-        "Send an image and describe what you want.\n\n"
+        "🖼️ Photo Improvement\n\n"
+        "Send your photo and tell me what you want:\n\n"
         "✨ Improve quality\n"
         "🧹 Remove background\n"
         "🎨 Change style\n"
-        "💡 Improve lighting\n\n"
-        "🔜 Image editing API can be connected here.",
+        "💡 Improve lighting\n"
+        "🔍 Enhance details\n\n"
+        "🔜 Real image editing requires an image processing service.",
 
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+        reply_markup=main_keyboard()
     )
 
 
@@ -638,27 +465,111 @@ async def analyze_link(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user_id = update.effective_user.id
-
     await update.message.reply_text(
 
-        "🔗 Link Analysis\n\n"
-        "Send me a link and I'll help analyze it.\n\n"
-        "📱 Instagram\n"
-        "🎵 Music\n"
-        "🎬 Video\n"
-        "📝 Web pages\n\n"
-        "🚀 More link tools can be connected later.",
+        "🔗 Analyze Link\n\n"
+        "Send me a link and tell me what you want to know about it.\n\n"
+        "📱 Social media links\n"
+        "🎵 Music information\n"
+        "🎬 Video content\n"
+        "📝 Page summaries\n\n"
+        "Some links may require an external API or web access.",
 
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+        reply_markup=main_keyboard()
     )
 
 
 # ═══════════════════════════════════════
-# 🔄 شروع دوباره
+# 👤 پروفایل
+# ═══════════════════════════════════════
+
+async def profile(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    user = update.effective_user
+    user_id = user.id
+
+    language = user_languages.get(
+        user_id,
+        "English"
+    )
+
+    username = (
+        f"@{user.username}"
+        if user.username
+        else "Not set"
+    )
+
+    await update.message.reply_text(
+
+        "╭──────────────╮\n"
+        "      👤 MY PROFILE\n"
+        "╰──────────────╯\n\n"
+
+        f"✨ Name: {user.first_name or 'Unknown'}\n"
+        f"🔗 Username: {username}\n"
+        f"🌍 Language: {language}\n"
+        f"🆔 ID: {user_id}\n\n"
+
+        "🤖 AI Assistant User\n"
+        "🧠 Smart tools enabled\n"
+        "💬 AI memory active\n\n"
+
+        "━━━━━━━━━━━━━━\n"
+        "⚡ Your personal AI assistant",
+
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# 🌍 تغییر زبان
+# ═══════════════════════════════════════
+
+async def change_language(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+
+        "🌍 Choose your new language:",
+
+        reply_markup=language_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# ℹ️ درباره
+# ═══════════════════════════════════════
+
+async def about(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    await update.message.reply_text(
+
+        "✨ About Smart AI Assistant ✨\n\n"
+        "🤖 An all-in-one AI assistant.\n\n"
+        "💬 AI Chat\n"
+        "🧠 Smart Tools\n"
+        "🎵 Music\n"
+        "🎬 Movies\n"
+        "🖼️ Images\n"
+        "🔗 Links\n"
+        "💻 Programming\n"
+        "📚 Education\n\n"
+        "🚀 More features will be added over time.",
+
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# 🔄 ریست
 # ═══════════════════════════════════════
 
 async def restart(
@@ -668,9 +579,7 @@ async def restart(
 
     user_id = update.effective_user.id
 
-    ai_mode.discard(
-        user_id
-    )
+    ai_mode.discard(user_id)
 
     ai_memory[user_id].clear()
 
@@ -681,7 +590,7 @@ async def restart(
 
 
 # ═══════════════════════════════════════
-# 📨 پردازش پیام‌ها
+# 📨 پردازش پیام
 # ═══════════════════════════════════════
 
 async def handle_text(
@@ -693,93 +602,80 @@ async def handle_text(
 
     user_id = update.effective_user.id
 
-    if text == "🤖 گفت‌وگو با AI" or text == "🤖 Chat with AI":
 
-        await start_ai(
-            update,
-            context
-        )
+    # زبان
+    if text in LANGUAGES:
 
-        return
-
-    if text == "🧠 ابزارهای هوشمند" or text == "🧠 Smart Tools":
-
-        await smart_tools(
-            update,
-            context
-        )
-
-        return
-
-    if text == "👤 پروفایل من" or text == "👤 My Profile":
-
-        await profile(
-            update,
-            context
-        )
-
-        return
-
-    if text == "🌍 تغییر زبان" or text == "🌍 Change Language":
+        user_languages[user_id] = LANGUAGES[text]
 
         await update.message.reply_text(
 
-            get_text(
-                user_id,
-                "choose_language"
-            ),
+            "✅ Language selected successfully! 🌍\n\n"
+            "🤖 Your AI assistant is ready.",
 
-            reply_markup=language_keyboard()
-
+            reply_markup=main_keyboard()
         )
 
-        return
-
-    if text == "🎵 تشخیص آهنگ" or text == "🎵 Music Finder":
-
-        await music_finder(
+        await send_welcome(
             update,
             context
         )
 
         return
 
-    if text == "🎬 پیدا کردن فیلم" or text == "🎬 Movie Finder":
 
-        await movie_finder(
-            update,
-            context
-        )
-
+    # منو
+    if text == "🤖 AI Chat":
+        await start_ai(update, context)
         return
 
-    if text == "🖼️ بهبود عکس" or text == "🖼️ Image Tools":
 
-        await improve_photo(
-            update,
-            context
-        )
-
+    if text == "🧠 Smart Tools":
+        await smart_tools(update, context)
         return
 
-    if text == "🔗 تحلیل لینک" or text == "🔗 Link Analysis":
 
-        await analyze_link(
-            update,
-            context
-        )
-
+    if text == "🎵 Music Finder":
+        await music_finder(update, context)
         return
 
-    if text == "🔄 شروع دوباره" or text == "🔄 Restart":
 
-        await restart(
-            update,
-            context
-        )
-
+    if text == "🎬 Movie Finder":
+        await movie_finder(update, context)
         return
 
+
+    if text == "🖼️ Improve Photo":
+        await improve_photo(update, context)
+        return
+
+
+    if text == "🔗 Analyze Link":
+        await analyze_link(update, context)
+        return
+
+
+    if text == "👤 My Profile":
+        await profile(update, context)
+        return
+
+
+    if text == "🌍 Change Language":
+        await change_language(update, context)
+        return
+
+
+    if text == "ℹ️ About":
+        await about(update, context)
+        return
+
+
+    if text == "🔄 Restart":
+        await restart(update, context)
+        return
+
+
+    # چت AI
     if user_id in ai_mode:
 
         await ask_ai(
@@ -789,14 +685,12 @@ async def handle_text(
 
         return
 
+
     await update.message.reply_text(
 
         "👇 Please choose an option from the menu.",
 
-        reply_markup=main_keyboard(
-            user_id
-        )
-
+        reply_markup=main_keyboard()
     )
 
 
@@ -812,9 +706,7 @@ def main():
 
         .builder()
 
-        .token(
-            BOT_TOKEN
-        )
+        .token(BOT_TOKEN)
 
         .build()
 
@@ -831,19 +723,9 @@ def main():
 
     app.add_handler(
 
-        CallbackQueryHandler(
-            language_callback,
-            pattern="^lang_"
-        )
-
-    )
-
-    app.add_handler(
-
         MessageHandler(
 
-            filters.TEXT
-            & ~filters.COMMAND,
+            filters.TEXT & ~filters.COMMAND,
 
             handle_text
 
@@ -852,7 +734,7 @@ def main():
     )
 
     print(
-        "🤖 Smart Multilingual AI Assistant is running..."
+        "🤖 Smart AI Assistant with Groq is running..."
     )
 
     app.run_polling()
