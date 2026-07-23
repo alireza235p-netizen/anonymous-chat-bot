@@ -1,12 +1,10 @@
-import logging
 import os
-from collections import defaultdict
+import logging
+import random
+import math
+from datetime import datetime, timezone
 
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-)
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -15,636 +13,406 @@ from telegram.ext import (
     filters,
 )
 
-# ==================================================
-# ⚙️ تنظیمات اصلی
-# ==================================================
+from supabase import create_client, Client
+
+
+# ═══════════════════════════════════════
+# ⚙️ تنظیمات
+# ═══════════════════════════════════════
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    level=logging.INFO
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# کاربران منتظر برای پیدا کردن مخاطب
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN تنظیم نشده است")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("SUPABASE_URL یا SUPABASE_KEY تنظیم نشده است")
+
+supabase: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY
+)
+
+
+# ═══════════════════════════════════════
+# 🧠 وضعیت موقت بات
+# ═══════════════════════════════════════
+
 waiting_users = []
-
-# چت‌های فعال
 active_chats = {}
-
-# کاربران مسدودشده
-blocked_users = defaultdict(set)
-
-# تعداد چت‌های کاربران
-user_stats = defaultdict(int)
+chat_started_at = {}
 
 
-# ==================================================
+# ═══════════════════════════════════════
 # 🎨 منوی اصلی
-# ==================================================
+# ═══════════════════════════════════════
 
 def main_keyboard():
-
     keyboard = [
         [
-            KeyboardButton("🔍 جستجوی مخاطب"),
+            KeyboardButton("🔍 جستجوی هوشمند"),
+            KeyboardButton("🎲 جستجوی شانسی"),
         ],
         [
-            KeyboardButton("⏭️ مخاطب بعدی"),
+            KeyboardButton("💬 نفر بعدی"),
             KeyboardButton("🛑 پایان گفتگو"),
         ],
         [
             KeyboardButton("👤 پروفایل من"),
-            KeyboardButton("📊 آمار من"),
+            KeyboardButton("🪙 موجودی سکه"),
         ],
         [
-            KeyboardButton("🆘 راهنما"),
+            KeyboardButton("❤️ لایک‌ها"),
+            KeyboardButton("👥 دعوت دوستان"),
+        ],
+        [
+            KeyboardButton("💰 کسب درآمد"),
+            KeyboardButton("⚙️ تنظیمات"),
         ],
     ]
 
     return ReplyKeyboardMarkup(
         keyboard,
-        resize_keyboard=True,
+        resize_keyboard=True
     )
 
 
-# ==================================================
-# 🎨 منوی داخل گفتگو
-# ==================================================
+# ═══════════════════════════════════════
+# 👤 ساخت یا دریافت کاربر
+# ═══════════════════════════════════════
 
-def chat_keyboard():
+def get_user(user_id):
 
-    keyboard = [
-        [
-            KeyboardButton("⏭️ مخاطب بعدی"),
-            KeyboardButton("🛑 پایان گفتگو"),
-        ],
-        [
-            KeyboardButton("🚫 مسدود کردن"),
-            KeyboardButton("⚠️ گزارش مخاطب"),
-        ],
-    ]
-
-    return ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True,
+    result = (
+        supabase
+        .table("users")
+        .select("*")
+        .eq("id", user_id)
+        .execute()
     )
 
+    if result.data:
+        return result.data[0]
 
-# ==================================================
-# 🚀 شروع ربات
-# ==================================================
+    new_user = {
+        "id": user_id,
+        "username": "",
+        "first_name": "",
+        "coins": 0,
+        "likes": 0,
+        "referrals": 0,
+        "last_seen": datetime.now(timezone.utc).isoformat()
+    }
+
+    try:
+        supabase.table("users").insert(new_user).execute()
+        return new_user
+    except Exception:
+        return None
+
+
+# ═══════════════════════════════════════
+# 🪙 تغییر موجودی سکه
+# ═══════════════════════════════════════
+
+def change_coins(user_id, amount, transaction_type, description):
+
+    user = get_user(user_id)
+
+    if not user:
+        return False
+
+    current_coins = user.get("coins") or 0
+    new_coins = current_coins + amount
+
+    if new_coins < 0:
+        return False
+
+    (
+        supabase
+        .table("users")
+        .update({"coins": new_coins})
+        .eq("id", user_id)
+        .execute()
+    )
+
+    transaction = {
+        "user_id": user_id,
+        "amount": amount,
+        "type": transaction_type,
+        "description": description
+    }
+
+    supabase.table("coin_transactions").insert(
+        transaction
+    ).execute()
+
+    return True
+
+
+# ═══════════════════════════════════════
+# 🚀 شروع
+# ═══════════════════════════════════════
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    user_id = update.effective_user.id
-    first_name = update.effective_user.first_name
+    user = update.effective_user
 
-    # حذف از صف
-    if user_id in waiting_users:
-        waiting_users.remove(user_id)
-
-    # قطع چت قبلی
-    if user_id in active_chats:
-
-        partner = active_chats.pop(user_id, None)
-
-        if partner:
-
-            active_chats.pop(partner, None)
-
-            try:
-                await context.bot.send_message(
-                    partner,
-                    "🔚 طرف مقابل دوباره ربات را باز کرد.\n"
-                    "گفتگو به پایان رسید.",
-                    reply_markup=main_keyboard(),
-                )
-            except Exception:
-                pass
-
-    welcome_text = f"""
-╭━━━━━━━━━━━━━━━━━━╮
-      🕵️‍♂️ چت ناشناس
-╰━━━━━━━━━━━━━━━━━━╯
-
-👋 سلام {first_name}!
-
-🤫 اینجا می‌تونی با افراد مختلف به‌صورت ناشناس گفتگو کنی.
-
-✨ ویژگی‌های ربات:
-
-💬 گفتگوی کاملاً ناشناس
-🔎 پیدا کردن افراد تصادفی
-⏭️ امکان تغییر مخاطب
-🚫 امکان مسدود کردن
-⚠️ امکان گزارش کاربران
-
-━━━━━━━━━━━━━━━━━━
-
-👇 برای شروع روی دکمه زیر بزن:
-
-🔍 جستجوی مخاطب
-"""
+    get_user(user.id)
 
     await update.message.reply_text(
-        welcome_text,
-        reply_markup=main_keyboard(),
+        f"🌈 سلام {user.first_name} عزیز! 😍\n\n"
+        "🎉 به دنیای چت ناشناس خوش اومدی!\n\n"
+        "💬 اینجا می‌تونی با آدم‌های جدید آشنا بشی.\n"
+        "🎲 جستجوی شانسی کاملاً رایگانه!\n"
+        "🪙 برای بعضی اتصال‌ها سکه مصرف میشه.\n\n"
+        "👇 از منوی پایین انتخاب کن:",
+        reply_markup=main_keyboard()
     )
 
 
-# ==================================================
-# 🔍 پیدا کردن مخاطب
-# ==================================================
+# ═══════════════════════════════════════
+# 🪙 موجودی
+# ═══════════════════════════════════════
 
-async def find_partner(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = get_user(update.effective_user.id)
+
+    coins = user.get("coins", 0) if user else 0
+
+    await update.message.reply_text(
+        f"🪙 موجودی شما:\n\n"
+        f"✨ {coins} سکه\n\n"
+        "💡 با دعوت دوستان می‌تونی سکه رایگان بگیری!",
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# 👤 پروفایل
+# ═══════════════════════════════════════
+
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = get_user(update.effective_user.id)
+
+    if not user:
+        await update.message.reply_text(
+            "❌ خطایی در دریافت پروفایل رخ داد."
+        )
+        return
+
+    age = user.get("age") or "ثبت نشده"
+    city = user.get("city") or "ثبت نشده"
+    province = user.get("province") or "ثبت نشده"
+    likes = user.get("likes") or 0
+    coins = user.get("coins") or 0
+
+    await update.message.reply_text(
+        "👤 پروفایل شما\n\n"
+        f"🎂 سن: {age}\n"
+        f"📍 استان: {province}\n"
+        f"🏙️ شهر: {city}\n"
+        f"❤️ لایک‌ها: {likes}\n"
+        f"🪙 سکه: {coins}\n\n"
+        "برای تکمیل پروفایل، در نسخه بعدی اطلاعات بیشتری اضافه می‌کنیم.",
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# 🎲 جستجوی شانسی
+# ═══════════════════════════════════════
+
+async def random_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
-    # داخل چت
     if user_id in active_chats:
-
         await update.message.reply_text(
-            "⚠️ شما در حال حاضر در یک گفتگو هستید!\n\n"
-            "برای تغییر مخاطب از دکمه «⏭️ مخاطب بعدی» استفاده کنید.",
-            reply_markup=chat_keyboard(),
+            "❗️شما الان داخل یک گفتگو هستید."
         )
-
         return
 
-    # قبلاً در صف
     if user_id in waiting_users:
-
         await update.message.reply_text(
-            "⏳ شما همین الان در صف جستجو هستید.\n\n"
-            "منتظر باشید تا یک مخاطب پیدا شود... 🔎",
-            reply_markup=main_keyboard(),
+            "⏳ شما از قبل در صف جستجو هستید."
         )
-
         return
 
-    # پیدا کردن نفر مناسب
-    partner = None
+    if waiting_users:
 
-    while waiting_users:
-
-        candidate = waiting_users.pop(0)
-
-        if candidate == user_id:
-            continue
-
-        # اگر طرف مقابل کاربر را بلاک کرده باشد
-        if user_id in blocked_users[candidate]:
-            continue
-
-        # اگر کاربر طرف مقابل را بلاک کرده باشد
-        if candidate in blocked_users[user_id]:
-            continue
-
-        partner = candidate
-        break
-
-    # اگر مخاطب پیدا شد
-    if partner:
+        partner = random.choice(waiting_users)
+        waiting_users.remove(partner)
 
         active_chats[user_id] = partner
         active_chats[partner] = user_id
 
-        user_stats[user_id] += 1
-        user_stats[partner] += 1
+        now = datetime.now(timezone.utc)
 
-        try:
+        chat_started_at[user_id] = now
+        chat_started_at[partner] = now
 
-            await context.bot.send_message(
-                user_id,
-                """
-╭━━━━━━━━━━━━━━━━━━╮
-     🎉 مخاطب پیدا شد!
-╰━━━━━━━━━━━━━━━━━━╯
+        await context.bot.send_message(
+            user_id,
+            "🎉 مخاطب پیدا شد!\n\n"
+            "💬 حالا می‌تونید ناشناس با هم صحبت کنید.\n"
+            "⏱️ حداقل ۱۲ ثانیه فرصت دارید.\n\n"
+            "🛑 پایان گفتگو\n"
+            "🔄 نفر بعدی",
+            reply_markup=main_keyboard()
+        )
 
-🤫 هویت شما برای طرف مقابل مخفی است.
+        await context.bot.send_message(
+            partner,
+            "🎉 مخاطب پیدا شد!\n\n"
+            "💬 حالا می‌تونید ناشناس با هم صحبت کنید.\n"
+            "⏱️ حداقل ۱۲ ثانیه فرصت دارید.\n\n"
+            "🛑 پایان گفتگو\n"
+            "🔄 نفر بعدی",
+            reply_markup=main_keyboard()
+        )
 
-💬 گفتگو را شروع کنید!
-
-✨ محترمانه صحبت کنید و از گفتگو لذت ببرید.
-""",
-                reply_markup=chat_keyboard(),
-            )
-
-            await context.bot.send_message(
-                partner,
-                """
-╭━━━━━━━━━━━━━━━━━━╮
-     🎉 مخاطب پیدا شد!
-╰━━━━━━━━━━━━━━━━━━╯
-
-🤫 هویت شما برای طرف مقابل مخفی است.
-
-💬 گفتگو را شروع کنید!
-
-✨ محترمانه صحبت کنید و از گفتگو لذت ببرید.
-""",
-                reply_markup=chat_keyboard(),
-            )
-
-        except Exception as error:
-
-            logging.error(error)
-
-            active_chats.pop(user_id, None)
-            active_chats.pop(partner, None)
-
-            await update.message.reply_text(
-                "❌ اتصال برقرار نشد.\n"
-                "لطفاً دوباره تلاش کنید.",
-                reply_markup=main_keyboard(),
-            )
-
-    # مخاطبی پیدا نشد
     else:
 
         waiting_users.append(user_id)
 
         await update.message.reply_text(
-            """
-╭━━━━━━━━━━━━━━━━━━╮
-     🔎 جستجوی مخاطب
-╰━━━━━━━━━━━━━━━━━━╯
-
-⏳ در حال پیدا کردن یک نفر برای شما...
-
-👤 شما وارد صف انتظار شدید.
-
-📢 به محض پیدا شدن مخاطب، اطلاع داده می‌شود.
-
-💡 می‌توانید منتظر بمانید یا جستجو را متوقف کنید.
-""",
-            reply_markup=main_keyboard(),
+            "🔎 در حال پیدا کردن یک مخاطب ناشناس...\n\n"
+            "🎲 جستجوی شانسی رایگانه!\n"
+            "⏳ کمی صبر کن...",
+            reply_markup=main_keyboard()
         )
 
 
-# ==================================================
+# ═══════════════════════════════════════
 # 🛑 پایان گفتگو
-# ==================================================
+# ═══════════════════════════════════════
 
-async def stop_chat(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
-    # اگر در صف است
-    if user_id in waiting_users:
-
-        waiting_users.remove(user_id)
-
-        await update.message.reply_text(
-            """
-🛑 جستجو متوقف شد.
-
-هر وقت خواستی دوباره با افراد جدید آشنا بشی،
-روی 🔍 «جستجوی مخاطب» بزن.
-""",
-            reply_markup=main_keyboard(),
-        )
-
-        return
-
-    # اگر چت ندارد
     if user_id not in active_chats:
 
+        if user_id in waiting_users:
+            waiting_users.remove(user_id)
+
         await update.message.reply_text(
-            "⚠️ شما در حال حاضر در هیچ گفتگویی نیستید.",
-            reply_markup=main_keyboard(),
+            "❗️شما داخل گفتگویی نیستید.",
+            reply_markup=main_keyboard()
         )
 
         return
 
-    partner = active_chats.get(user_id)
+    start_time = chat_started_at.get(user_id)
 
-    active_chats.pop(user_id, None)
+    if start_time:
 
-    if partner:
+        elapsed = (
+            datetime.now(timezone.utc) - start_time
+        ).total_seconds()
 
-        active_chats.pop(partner, None)
+        if elapsed < 12:
 
-        try:
+            remaining = int(12 - elapsed)
 
-            await context.bot.send_message(
-                partner,
-                """
-🔚 گفتگو به پایان رسید.
-
-👤 طرف مقابل گفتگو را ترک کرد.
-
-اگر دوست داری با یک نفر جدید آشنا بشی،
-روی 🔍 «جستجوی مخاطب» بزن.
-""",
-                reply_markup=main_keyboard(),
+            await update.message.reply_text(
+                f"⏱️ هنوز {remaining} ثانیه از شروع گفتگو نگذشته!\n"
+                "لطفاً کمی صبر کن 😄"
             )
 
-        except Exception:
-            pass
+            return
 
-    await update.message.reply_text(
-        """
-✅ گفتگو با موفقیت پایان یافت.
+    partner = active_chats[user_id]
 
-💬 ممنون که از چت ناشناس استفاده کردی!
-""",
-        reply_markup=main_keyboard(),
-    )
+    del active_chats[user_id]
 
+    chat_started_at.pop(user_id, None)
 
-# ==================================================
-# ⏭️ مخاطب بعدی
-# ==================================================
+    if partner in active_chats:
 
-async def next_chat(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+        del active_chats[partner]
 
-    user_id = update.effective_user.id
-
-    if user_id not in active_chats:
-
-        await update.message.reply_text(
-            "⚠️ شما در حال حاضر با کسی گفتگو نمی‌کنید.\n\n"
-            "ابتدا یک مخاطب پیدا کنید.",
-            reply_markup=main_keyboard(),
-        )
-
-        return
-
-    partner = active_chats.pop(user_id, None)
-
-    if partner:
-
-        active_chats.pop(partner, None)
-
-        try:
-
-            await context.bot.send_message(
-                partner,
-                """
-⏭️ طرف مقابل به سراغ یک مخاطب جدید رفت.
-
-🔎 گفتگو به پایان رسید.
-""",
-                reply_markup=main_keyboard(),
-            )
-
-        except Exception:
-            pass
-
-    await update.message.reply_text(
-        """
-⏭️ مخاطب قبلی کنار گذاشته شد.
-
-🔎 در حال پیدا کردن یک مخاطب جدید...
-""",
-        reply_markup=main_keyboard(),
-    )
-
-    await find_partner(
-        update,
-        context,
-    )
-
-
-# ==================================================
-# 🚫 مسدود کردن
-# ==================================================
-
-async def block_user(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    user_id = update.effective_user.id
-
-    if user_id not in active_chats:
-
-        await update.message.reply_text(
-            "⚠️ شما در حال حاضر در گفتگویی نیستید.",
-            reply_markup=main_keyboard(),
-        )
-
-        return
-
-    partner = active_chats.get(user_id)
-
-    if not partner:
-        return
-
-    blocked_users[user_id].add(partner)
-
-    active_chats.pop(user_id, None)
-    active_chats.pop(partner, None)
-
-    try:
+        chat_started_at.pop(partner, None)
 
         await context.bot.send_message(
             partner,
-            """
-🚫 این گفتگو توسط طرف مقابل پایان یافت.
-
-🔎 شما دیگر با این کاربر روبه‌رو نخواهید شد.
-""",
-            reply_markup=main_keyboard(),
+            "🔚 طرف مقابل گفتگو را پایان داد.\n\n"
+            "🎲 برای پیدا کردن نفر جدید، جستجوی شانسی را بزن!",
+            reply_markup=main_keyboard()
         )
 
-    except Exception:
-        pass
-
     await update.message.reply_text(
-        """
-🚫 کاربر مسدود شد.
-
-🔚 گفتگو پایان یافت.
-
-از این به بعد تلاش می‌کنیم دوباره به این کاربر متصل نشوید.
-""",
-        reply_markup=main_keyboard(),
+        "✅ گفتگو با موفقیت پایان یافت.\n\n"
+        "💬 ممنون که از ربات استفاده کردی!",
+        reply_markup=main_keyboard()
     )
 
 
-# ==================================================
-# ⚠️ گزارش مخاطب
-# ==================================================
+# ═══════════════════════════════════════
+# 🔄 نفر بعدی
+# ═══════════════════════════════════════
 
-async def report_user(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def next_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
-    if user_id not in active_chats:
+    if user_id in active_chats:
 
-        await update.message.reply_text(
-            "⚠️ شما در حال حاضر در گفتگویی نیستید.",
-            reply_markup=main_keyboard(),
-        )
+        start_time = chat_started_at.get(user_id)
 
-        return
+        if start_time:
 
-    partner = active_chats.get(user_id)
+            elapsed = (
+                datetime.now(timezone.utc) - start_time
+            ).total_seconds()
 
-    # پایان گفتگو
-    active_chats.pop(user_id, None)
+            if elapsed < 12:
 
-    if partner:
-        active_chats.pop(partner, None)
+                await update.message.reply_text(
+                    "⏱️ هنوز ۱۲ ثانیه کامل نشده!\n"
+                    "کمی دیگه صبر کن 😄"
+                )
 
-        try:
+                return
+
+        partner = active_chats[user_id]
+
+        del active_chats[user_id]
+
+        chat_started_at.pop(user_id, None)
+
+        if partner in active_chats:
+
+            del active_chats[partner]
+
+            chat_started_at.pop(partner, None)
 
             await context.bot.send_message(
                 partner,
-                """
-⚠️ گفتگو توسط طرف مقابل گزارش شد.
-
-🔚 این گفتگو پایان یافت.
-""",
-                reply_markup=main_keyboard(),
+                "🔄 طرف مقابل رفت دنبال نفر بعدی.",
+                reply_markup=main_keyboard()
             )
 
-        except Exception:
-            pass
-
-    await update.message.reply_text(
-        """
-⚠️ گزارش شما ثبت شد.
-
-🛡️ ممنون که به امن‌تر شدن محیط کمک می‌کنی.
-
-🔚 گفتگو پایان یافت.
-""",
-        reply_markup=main_keyboard(),
-    )
+    await random_search(update, context)
 
 
-# ==================================================
-# 👤 پروفایل
-# ==================================================
-
-async def profile(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    user = update.effective_user
-    user_id = user.id
-
-    chats = user_stats[user_id]
-
-    status = "💬 در حال گفتگو" if user_id in active_chats else "🟢 آزاد"
-
-    await update.message.reply_text(
-        f"""
-╭━━━━━━━━━━━━━━━━━━╮
-       👤 پروفایل من
-╰━━━━━━━━━━━━━━━━━━╯
-
-🆔 شناسه کاربری: {user_id}
-
-📊 تعداد گفتگوها: {chats}
-
-📍 وضعیت فعلی: {status}
-
-🤫 هویت شما برای کاربران دیگر نمایش داده نمی‌شود.
-""",
-        reply_markup=main_keyboard(),
-    )
-
-
-# ==================================================
-# 📊 آمار
-# ==================================================
-
-async def stats(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    user_id = update.effective_user.id
-
-    chats = user_stats[user_id]
-
-    await update.message.reply_text(
-        f"""
-╭━━━━━━━━━━━━━━━━━━╮
-        📊 آمار من
-╰━━━━━━━━━━━━━━━━━━╯
-
-💬 تعداد گفتگوهای شما:
-
-✨ {chats} گفتگو
-
-━━━━━━━━━━━━━━━━━━
-
-🤖 از چت ناشناس لذت ببرید!
-""",
-        reply_markup=main_keyboard(),
-    )
-
-
-# ==================================================
-# 🆘 راهنما
-# ==================================================
-
-async def help_command(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    await update.message.reply_text(
-        """
-╭━━━━━━━━━━━━━━━━━━╮
-       🆘 راهنمای چت ناشناس
-╰━━━━━━━━━━━━━━━━━━╯
-
-🔍 جستجوی مخاطب
-برای پیدا کردن یک شخص تصادفی.
-
-⏭️ مخاطب بعدی
-گفتگوی فعلی را پایان می‌دهد و
-دنبال شخص جدید می‌گردد.
-
-🛑 پایان گفتگو
-گفتگو را به‌طور کامل متوقف می‌کند.
-
-🚫 مسدود کردن
-مخاطب فعلی را مسدود می‌کند.
-
-⚠️ گزارش مخاطب
-در صورت رفتار نامناسب می‌توانید
-مخاطب را گزارش کنید.
-
-━━━━━━━━━━━━━━━━━━
-
-🛡️ لطفاً قوانین و حریم خصوصی دیگران
-را رعایت کنید.
-
-🤝 احترام متقابل باعث می‌شود
-محیط بهتری برای همه داشته باشیم.
-""",
-        reply_markup=main_keyboard(),
-    )
-
-
-# ==================================================
+# ═══════════════════════════════════════
 # 💬 انتقال پیام
-# ==================================================
+# ═══════════════════════════════════════
 
 async def relay_message(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
 
     user_id = update.effective_user.id
@@ -652,10 +420,7 @@ async def relay_message(
     if user_id not in active_chats:
         return
 
-    partner = active_chats.get(user_id)
-
-    if not partner:
-        return
+    partner = active_chats[user_id]
 
     try:
 
@@ -672,107 +437,153 @@ async def relay_message(
         )
 
 
-# ==================================================
-# 🎛️ مدیریت دکمه‌ها
-# ==================================================
+# ═══════════════════════════════════════
+# 👥 دعوت دوستان
+# ═══════════════════════════════════════
 
-async def handle_message(
+async def referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
+
+    bot = await context.bot.get_me()
+
+    link = (
+        f"https://t.me/{bot.username}"
+        f"?start=ref_{user_id}"
+    )
+
+    user = get_user(user_id)
+
+    count = user.get("referrals", 0) if user else 0
+
+    await update.message.reply_text(
+        "👥 دعوت دوستان\n\n"
+        f"🎁 به ازای هر دوست جدید: 🪙 ۱۰ سکه\n\n"
+        f"👤 تعداد دعوت‌های شما: {count}\n\n"
+        "🔗 لینک دعوت شما:\n"
+        f"{link}\n\n"
+        "📢 لینک رو برای دوستات بفرست!",
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# 💰 کسب درآمد
+# ═══════════════════════════════════════
+
+async def earn_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "💰 کسب درآمد\n\n"
+        "🪙 این بخش برای فروش سکه و سیستم درآمدزایی آماده شده.\n\n"
+        "📦 بسته‌های سکه در نسخه بعدی اضافه می‌شن.\n"
+        "💳 پرداخت آنلاین هم بعداً قابل اتصال هست.",
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# ❤️ لایک‌ها
+# ═══════════════════════════════════════
+
+async def likes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = get_user(update.effective_user.id)
+
+    count = user.get("likes", 0) if user else 0
+
+    await update.message.reply_text(
+        f"❤️ تعداد لایک‌های پروفایل شما:\n\n"
+        f"💖 {count} لایک",
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# 🧠 جستجوی هوشمند
+# ═══════════════════════════════════════
+
+async def smart_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "🧠 جستجوی هوشمند\n\n"
+        "🎂 حداقل سن\n"
+        "🎂 حداکثر سن\n"
+        "👨 پسر\n"
+        "👩 دختر\n"
+        "🌍 همه\n"
+        "📍 انتخاب شهر\n\n"
+        "این بخش در مرحله بعدی با دکمه‌های انتخابی تکمیل می‌شود.",
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# ⚙️ تنظیمات
+# ═══════════════════════════════════════
+
+async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "⚙️ تنظیمات\n\n"
+        "🔔 اعلان‌ها\n"
+        "👤 ویرایش پروفایل\n"
+        "🔒 حریم خصوصی\n"
+        "🚫 کاربران بلاک‌شده",
+        reply_markup=main_keyboard()
+    )
+
+
+# ═══════════════════════════════════════
+# 📨 پردازش دکمه‌ها
+# ═══════════════════════════════════════
+
+async def handle_text(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
+    context: ContextTypes.DEFAULT_TYPE
 ):
 
     text = update.message.text
 
-    if text == "🔍 جستجوی مخاطب":
+    if text == "🎲 جستجوی شانسی":
+        await random_search(update, context)
 
-        await find_partner(
-            update,
-            context,
-        )
+    elif text == "💬 نفر بعدی":
+        await next_chat(update, context)
 
-        return
+    elif text == "🛑 پایان گفتگو":
+        await stop_chat(update, context)
 
-    if text == "⏭️ مخاطب بعدی":
+    elif text == "🪙 موجودی سکه":
+        await balance(update, context)
 
-        await next_chat(
-            update,
-            context,
-        )
+    elif text == "👤 پروفایل من":
+        await profile(update, context)
 
-        return
+    elif text == "👥 دعوت دوستان":
+        await referrals(update, context)
 
-    if text == "🛑 پایان گفتگو":
+    elif text == "💰 کسب درآمد":
+        await earn_money(update, context)
 
-        await stop_chat(
-            update,
-            context,
-        )
+    elif text == "❤️ لایک‌ها":
+        await likes(update, context)
 
-        return
+    elif text == "🧠 جستجوی هوشمند":
+        await smart_search(update, context)
 
-    if text == "🚫 مسدود کردن":
+    elif text == "⚙️ تنظیمات":
+        await settings(update, context)
 
-        await block_user(
-            update,
-            context,
-        )
-
-        return
-
-    if text == "⚠️ گزارش مخاطب":
-
-        await report_user(
-            update,
-            context,
-        )
-
-        return
-
-    if text == "👤 پروفایل من":
-
-        await profile(
-            update,
-            context,
-        )
-
-        return
-
-    if text == "📊 آمار من":
-
-        await stats(
-            update,
-            context,
-        )
-
-        return
-
-    if text == "🆘 راهنما":
-
-        await help_command(
-            update,
-            context,
-        )
-
-        return
-
-    # انتقال پیام عادی
-    await relay_message(
-        update,
-        context,
-    )
+    else:
+        await relay_message(update, context)
 
 
-# ==================================================
-# 🚀 اجرای ربات
-# ==================================================
+# ═══════════════════════════════════════
+# 🚀 اجرای بات
+# ═══════════════════════════════════════
 
 def main():
-
-    if not BOT_TOKEN:
-
-        raise ValueError(
-            "❌ BOT_TOKEN در Railway تنظیم نشده است."
-        )
 
     app = (
         Application
@@ -781,53 +592,40 @@ def main():
         .build()
     )
 
-    # دستورات
     app.add_handler(
-        CommandHandler(
-            "start",
-            start,
-        )
+        CommandHandler("start", start)
     )
 
     app.add_handler(
-        CommandHandler(
-            "find",
-            find_partner,
-        )
+        CommandHandler("find", random_search)
     )
 
     app.add_handler(
-        CommandHandler(
-            "next",
-            next_chat,
-        )
+        CommandHandler("stop", stop_chat)
     )
 
     app.add_handler(
-        CommandHandler(
-            "stop",
-            stop_chat,
-        )
+        CommandHandler("next", next_chat)
     )
 
-    # پیام‌ها
     app.add_handler(
         MessageHandler(
-            filters.ALL & ~filters.COMMAND,
-            handle_message,
+            filters.TEXT & ~filters.COMMAND,
+            handle_text
         )
     )
 
-    print(
-        "🚀 Anonymous Chat Bot is running..."
+    app.add_handler(
+        MessageHandler(
+            ~filters.COMMAND & ~filters.TEXT,
+            relay_message
+        )
     )
+
+    print("🤖 Anonymous Chat Bot is running...")
 
     app.run_polling()
 
-
-# ==================================================
-# 🏁 شروع
-# ==================================================
 
 if __name__ == "__main__":
     main()
