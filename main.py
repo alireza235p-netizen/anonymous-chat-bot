@@ -35,6 +35,7 @@ logging.basicConfig(
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 AUDD_API_TOKEN = os.getenv("AUDD_API_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN is missing")
@@ -43,7 +44,14 @@ if not GROQ_API_KEY:
     raise ValueError("GROQ_API_KEY is missing")
 
 if not AUDD_API_TOKEN:
-    logging.warning("AUDD_API_TOKEN is missing. Music recognition will be disabled.")
+    logging.warning(
+        "AUDD_API_TOKEN is missing. Music recognition disabled."
+    )
+
+if not HF_TOKEN:
+    logging.warning(
+        "HF_TOKEN is missing. Image enhancement disabled."
+    )
 
 
 client = Groq(
@@ -148,7 +156,6 @@ TEXTS = {
 
     },
 
-
     "Persian": {
 
         "ai": "🤖 گفت‌وگو با AI",
@@ -201,76 +208,37 @@ def main_keyboard(user_id):
         [
 
             [
-                KeyboardButton(
-                    t(user_id, "ai")
-                ),
-
-                KeyboardButton(
-                    t(user_id, "tools")
-                ),
-
+                KeyboardButton(t(user_id, "ai")),
+                KeyboardButton(t(user_id, "tools")),
             ],
 
             [
-                KeyboardButton(
-                    t(user_id, "music")
-                ),
-
-                KeyboardButton(
-                    t(user_id, "movie")
-                ),
-
+                KeyboardButton(t(user_id, "music")),
+                KeyboardButton(t(user_id, "movie")),
             ],
 
             [
-                KeyboardButton(
-                    t(user_id, "photo")
-                ),
-
-                KeyboardButton(
-                    t(user_id, "link")
-                ),
-
+                KeyboardButton(t(user_id, "photo")),
+                KeyboardButton(t(user_id, "link")),
             ],
 
             [
-                KeyboardButton(
-                    t(user_id, "profile")
-                ),
-
-                KeyboardButton(
-                    t(user_id, "game")
-                ),
-
+                KeyboardButton(t(user_id, "profile")),
+                KeyboardButton(t(user_id, "game")),
             ],
 
             [
-                KeyboardButton(
-                    t(user_id, "private")
-                ),
-
-                KeyboardButton(
-                    t(user_id, "language")
-                ),
-
+                KeyboardButton(t(user_id, "private")),
+                KeyboardButton(t(user_id, "language")),
             ],
 
             [
-                KeyboardButton(
-                    t(user_id, "settings")
-                ),
-
-                KeyboardButton(
-                    t(user_id, "about")
-                ),
-
+                KeyboardButton(t(user_id, "settings")),
+                KeyboardButton(t(user_id, "about")),
             ],
 
             [
-                KeyboardButton(
-                    t(user_id, "restart")
-                ),
-
+                KeyboardButton(t(user_id, "restart")),
             ],
 
         ],
@@ -289,9 +257,7 @@ async def start(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    user = update.effective_user
-
-    user_id = user.id
+    user_id = update.effective_user.id
 
     if user_id not in selected_language:
 
@@ -320,7 +286,6 @@ async def start(
 
         return
 
-
     await welcome(
         update,
         context
@@ -343,7 +308,6 @@ async def welcome(
         "English"
     )
 
-
     if lang == "Persian":
 
         text = (
@@ -355,14 +319,14 @@ async def welcome(
             "💬 گفت‌وگو با هوش مصنوعی\n"
             "🧠 حل سؤال و کمک درسی\n"
             "✍️ نوشتن و ترجمه\n"
-            "🎵 پیدا کردن آهنگ از فایل صوتی و Voice\n"
-            "📺 پیدا کردن سریال و اطلاعات کاملش\n"
-            "🖼️ ابزارهای هوشمند عکس\n"
-            "🔗 بررسی لینک‌ها\n"
-            "🎲 بازی جرئت یا حقیقت\n"
+            "🎵 پیدا کردن آهنگ\n"
+            "📺 پیدا کردن سریال\n"
+            "🖼️ افزایش کیفیت عکس\n"
+            "🔗 ابزار لینک\n"
+            "🎲 جرئت یا حقیقت\n"
             "🔒 چت خصوصی\n"
             "💻 برنامه‌نویسی\n"
-            "😂 و البته کلی طنز و شیطنت!\n\n"
+            "😂 کلی طنز و شیطنت!\n\n"
 
             "🚀 از منوی پایین شروع کن."
 
@@ -381,7 +345,7 @@ async def welcome(
             "✍️ Writing & Translation\n"
             "🎵 Music Finder\n"
             "📺 Series Finder\n"
-            "🖼️ Image Tools\n"
+            "🖼️ Image Enhancement\n"
             "🔗 Link Tools\n"
             "🎲 Truth or Dare\n"
             "🔒 Private Chat\n"
@@ -391,7 +355,6 @@ async def welcome(
             "🚀 Choose an option below."
 
         )
-
 
     await update.message.reply_text(
 
@@ -419,21 +382,11 @@ async def start_ai(
         user_id
     )
 
-
     await update.message.reply_text(
 
         "🤖 AI MODE ACTIVATED\n\n"
 
-        "Ask me anything.\n\n"
-
-        "🧠 Study\n"
-        "💻 Programming\n"
-        "✍️ Writing\n"
-        "🎬 Movies & Series\n"
-        "🎵 Music\n"
-        "💡 Ideas\n\n"
-
-        "😎 I'm ready.",
+        "Ask me anything. 😎",
 
         reply_markup=main_keyboard(
             user_id
@@ -460,7 +413,6 @@ async def ask_ai(
         "English"
     )
 
-
     memory[user_id].append(
 
         {
@@ -470,17 +422,16 @@ async def ask_ai(
 
     )
 
-
     system_prompt = f"""
 
 You are a powerful all-purpose AI assistant.
 
-The user's selected language is:
+Selected language:
 {lang}
 
 Always answer in the selected language.
 
-Your personality:
+Personality:
 
 - Intelligent
 - Funny
@@ -489,30 +440,15 @@ Your personality:
 - Friendly
 - Uses emojis naturally
 - Can use clever sarcasm
-- Can make playful jokes
 - Can respond to insults with witty humor
 
 Never threaten the user.
 Never use hateful content.
-Always try to be useful.
+Always be useful.
 
-Help with:
+If the user insults you, give a short witty comeback and continue helping.
 
-Study
-Programming
-Writing
-Translation
-Science
-Technology
-Movies
-Series
-Music
-Creative ideas
-Everyday questions
-
-If the user insults you, respond with a short witty comeback and continue helping.
 """
-
 
     messages = [
 
@@ -523,13 +459,11 @@ If the user insults you, respond with a short witty comeback and continue helpin
 
     ]
 
-
     messages.extend(
         list(
             memory[user_id]
         )
     )
-
 
     try:
 
@@ -545,7 +479,6 @@ If the user insults you, respond with a short witty comeback and continue helpin
 
         )
 
-
         answer = (
 
             response
@@ -555,13 +488,11 @@ If the user insults you, respond with a short witty comeback and continue helpin
 
         )
 
-
         if not answer:
 
             answer = (
                 "🤖 My brain just went on coffee break. 😂"
             )
-
 
         memory[user_id].append(
 
@@ -571,7 +502,6 @@ If the user insults you, respond with a short witty comeback and continue helpin
             }
 
         )
-
 
         await update.message.reply_text(
 
@@ -583,13 +513,11 @@ If the user insults you, respond with a short witty comeback and continue helpin
 
         )
 
-
     except Exception:
 
         logging.exception(
             "Groq Error"
         )
-
 
         await update.message.reply_text(
 
@@ -616,7 +544,6 @@ async def profile(
 
     user_id = user.id
 
-
     username = (
 
         f"@{user.username}"
@@ -626,7 +553,6 @@ async def profile(
         else "Not set"
 
     )
-
 
     await update.message.reply_text(
 
@@ -642,10 +568,10 @@ async def profile(
 
         f"🤖 AI Assistant User\n"
         f"🧠 AI Memory: Active\n"
-        f"🎲 Games: Available\n"
-        f"🔒 Private Mode: Available\n\n"
+        f"🎵 Music Recognition: Active\n"
+        f"🖼️ Image Enhancement: Active\n\n"
 
-        f"⚡ Powered by Groq",
+        f"⚡ Powered by Groq + Hugging Face",
 
         reply_markup=main_keyboard(
             user_id
@@ -665,13 +591,11 @@ async def private_chat(
 
     user_id = update.effective_user.id
 
-
     if user_id in private_mode:
 
         private_mode.discard(
             user_id
         )
-
 
         await update.message.reply_text(
 
@@ -685,14 +609,11 @@ async def private_chat(
 
         return
 
-
     private_mode.add(
         user_id
     )
 
-
     memory[user_id].clear()
-
 
     await update.message.reply_text(
 
@@ -724,14 +645,13 @@ truth_questions = [
 
 ]
 
-
 dare_questions = [
 
     "Send a funny voice message.",
-    "Change your profile picture for 5 minutes.",
     "Write a completely random sentence.",
     "Send your funniest emoji combination.",
     "Tell a joke without laughing.",
+    "Change your profile picture for 5 minutes.",
 
 ]
 
@@ -743,23 +663,15 @@ async def truth_dare(
 
     user_id = update.effective_user.id
 
-
     choice = random.choice(
-
-        [
-            "truth",
-            "dare"
-        ]
-
+        ["truth", "dare"]
     )
-
 
     if choice == "truth":
 
         question = random.choice(
             truth_questions
         )
-
 
         text = (
 
@@ -769,13 +681,11 @@ async def truth_dare(
 
         )
 
-
     else:
 
         question = random.choice(
             dare_questions
         )
-
 
         text = (
 
@@ -784,7 +694,6 @@ async def truth_dare(
             "👥 Send it to your friend."
 
         )
-
 
     await update.message.reply_text(
 
@@ -798,7 +707,7 @@ async def truth_dare(
 
 
 # =========================================================
-# 🎵 MUSIC MENU
+# 🎵 MUSIC
 # =========================================================
 
 async def music(
@@ -808,17 +717,13 @@ async def music(
 
     user_id = update.effective_user.id
 
-
     await update.message.reply_text(
 
         "🎵 Music Finder 🎶\n\n"
 
         "یک فایل صوتی یا Voice بفرست.\n\n"
 
-        "🎧 من تلاش می‌کنم اسم آهنگ و خواننده رو پیدا کنم.\n\n"
-
-        "💡 هرچی قسمت آهنگ واضح‌تر باشه، "
-        "احتمال شناسایی بیشتره.",
+        "🎧 اسم آهنگ و خواننده رو پیدا می‌کنم.",
 
         reply_markup=main_keyboard(
             user_id
@@ -840,13 +745,11 @@ async def recognize_music(
 
     temp_file = None
 
-
     if not AUDD_API_TOKEN:
 
         await update.message.reply_text(
 
-            "❌ Music recognition is not configured yet.\n\n"
-            "AUDD_API_TOKEN is missing.",
+            "❌ AUDD_API_TOKEN is missing.",
 
             reply_markup=main_keyboard(
                 user_id
@@ -856,36 +759,27 @@ async def recognize_music(
 
         return
 
-
     try:
 
         if update.message.audio:
 
-            file_id = (
-                update.message.audio.file_id
-            )
+            file_id = update.message.audio.file_id
 
             extension = ".mp3"
 
-
         elif update.message.voice:
 
-            file_id = (
-                update.message.voice.file_id
-            )
+            file_id = update.message.voice.file_id
 
             extension = ".ogg"
-
 
         else:
 
             return
 
-
         telegram_file = await context.bot.get_file(
             file_id
         )
-
 
         temp_file = (
 
@@ -896,18 +790,13 @@ async def recognize_music(
 
         )
 
-
         await telegram_file.download_to_drive(
             custom_path=temp_file
         )
 
-
         await update.message.reply_text(
-
             "🎵 دارم آهنگ رو شناسایی می‌کنم... 🔎🎶"
-
         )
-
 
         with open(
             temp_file,
@@ -936,51 +825,17 @@ async def recognize_music(
 
             )
 
-
-        if response.status_code != 200:
-
-            await update.message.reply_text(
-
-                "❌ سرویس تشخیص آهنگ پاسخ مناسبی نداد.",
-
-                reply_markup=main_keyboard(
-                    user_id
-                )
-
-            )
-
-            return
-
-
         data = response.json()
-
-
-        if data.get("status") != "success":
-
-            await update.message.reply_text(
-
-                "❌ خطا در سرویس تشخیص آهنگ.",
-
-                reply_markup=main_keyboard(
-                    user_id
-                )
-
-            )
-
-            return
-
 
         result = data.get(
             "result"
         )
 
-
         if not result:
 
             await update.message.reply_text(
 
-                "😕 نتونستم آهنگ رو شناسایی کنم.\n\n"
-                "🎵 یک قسمت واضح‌تر از آهنگ بفرست.",
+                "😕 نتونستم آهنگ رو شناسایی کنم.",
 
                 reply_markup=main_keyboard(
                     user_id
@@ -989,61 +844,41 @@ async def recognize_music(
             )
 
             return
-
 
         title = result.get(
             "title",
             "Unknown"
         )
 
-
         artist = result.get(
             "artist",
             "Unknown"
         )
-
 
         album = result.get(
             "album",
             "Unknown"
         )
 
-
-        release_date = result.get(
-            "release_date",
-            "Unknown"
-        )
-
-
         song_link = result.get(
             "song_link"
         )
-
 
         text = (
 
             "🎵 آهنگ شناسایی شد! 🎉\n\n"
 
             f"🎼 آهنگ: {title}\n"
-
             f"🎤 خواننده: {artist}\n"
-
             f"💿 آلبوم: {album}\n"
 
-            f"📅 تاریخ انتشار: {release_date}\n"
-
         )
-
 
         if song_link:
 
             text += (
-
-                f"\n🔗 لینک آهنگ:\n"
-                f"{song_link}"
-
+                f"\n🔗 لینک آهنگ:\n{song_link}"
             )
-
 
         await update.message.reply_text(
 
@@ -1055,25 +890,21 @@ async def recognize_music(
 
         )
 
-
     except Exception:
 
         logging.exception(
             "Music Recognition Error"
         )
 
-
         await update.message.reply_text(
 
-            "❌ هنگام تشخیص آهنگ مشکلی پیش اومد.\n\n"
-            "🎧 یک فایل صوتی کوتاه و واضح‌تر امتحان کن.",
+            "❌ هنگام تشخیص آهنگ مشکلی پیش اومد.",
 
             reply_markup=main_keyboard(
                 user_id
             )
 
         )
-
 
     finally:
 
@@ -1093,7 +924,7 @@ async def recognize_music(
 
 
 # =========================================================
-# 🎬 TVMAZE SERIES MENU
+# 🎬 MOVIE / SERIES
 # =========================================================
 
 async def movie(
@@ -1103,24 +934,19 @@ async def movie(
 
     user_id = update.effective_user.id
 
-
     context.user_data[
         "waiting_for_show"
     ] = True
-
 
     await update.message.reply_text(
 
         "🎬 اسم فیلم یا سریال رو بفرست.\n\n"
 
         "مثلاً:\n"
-
         "Breaking Bad\n"
         "بریکینگ بد\n"
         "Game of Thrones\n"
-        "بازی تاج و تخت\n\n"
-
-        "🔎 من تلاش می‌کنم عنوان درست رو پیدا کنم.",
+        "بازی تاج و تخت",
 
         reply_markup=main_keyboard(
             user_id
@@ -1130,7 +956,7 @@ async def movie(
 
 
 # =========================================================
-# 📺 SEARCH TVMAZE + GROQ TRANSLATION
+# 📺 SEARCH TVMAZE
 # =========================================================
 
 async def search_tvmaze(
@@ -1142,17 +968,11 @@ async def search_tvmaze(
 
     query = update.message.text.strip()
 
-
     context.user_data[
         "waiting_for_show"
     ] = False
 
-
     try:
-
-        # -------------------------------------------------
-        # تبدیل نام فارسی به عنوان انگلیسی
-        # -------------------------------------------------
 
         translation_response = client.chat.completions.create(
 
@@ -1161,27 +981,17 @@ async def search_tvmaze(
             messages=[
 
                 {
-
                     "role": "system",
-
                     "content": (
-
-                        "Convert the user's movie or TV show name "
-                        "into its most likely official English title. "
-                        "If the input is already English, return it unchanged. "
-                        "Return ONLY the title. "
-                        "Do not explain."
-
+                        "Convert this movie or TV show name "
+                        "to the most likely English title. "
+                        "Return ONLY the title."
                     )
-
                 },
 
                 {
-
                     "role": "user",
-
                     "content": query
-
                 }
 
             ],
@@ -1192,7 +1002,6 @@ async def search_tvmaze(
 
         )
 
-
         search_query = (
 
             translation_response
@@ -1202,11 +1011,6 @@ async def search_tvmaze(
             .strip()
 
         )
-
-
-        # -------------------------------------------------
-        # جستجوی TVmaze
-        # -------------------------------------------------
 
         response = requests.get(
 
@@ -1223,9 +1027,6 @@ async def search_tvmaze(
             timeout=10
 
         )
-
-
-        # اگر پیدا نشد، خود متن کاربر را امتحان کن
 
         if response.status_code != 200:
 
@@ -1245,13 +1046,11 @@ async def search_tvmaze(
 
             )
 
-
         if response.status_code != 200:
 
             await update.message.reply_text(
 
-                "❌ چیزی با این اسم پیدا نکردم.\n\n"
-                "اسم فیلم یا سریال رو کمی دقیق‌تر بفرست.",
+                "❌ چیزی با این اسم پیدا نکردم.",
 
                 reply_markup=main_keyboard(
                     user_id
@@ -1261,15 +1060,12 @@ async def search_tvmaze(
 
             return
 
-
         show = response.json()
-
 
         name = show.get(
             "name",
             "Unknown"
         )
-
 
         rating = (
 
@@ -1284,73 +1080,43 @@ async def search_tvmaze(
 
         )
 
-
         language = (
-
-            show.get(
-                "language"
-            )
-
+            show.get("language")
             or "N/A"
-
         )
-
 
         premiered = (
-
-            show.get(
-                "premiered"
-            )
-
+            show.get("premiered")
             or "N/A"
-
         )
 
-
         genres = ", ".join(
-
             show.get(
                 "genres",
                 []
             )
-
         ) or "N/A"
 
-
         summary = show.get(
-
             "summary",
-
             "No description available."
-
         )
-
 
         summary = re.sub(
-
             "<.*?>",
-
             "",
-
             summary
-
         )
-
 
         official_url = (
 
-            show.get(
-                "officialSite"
-            )
+            show.get("officialSite")
 
-            or show.get(
-                "url"
-            )
+            or show.get("url")
 
             or "N/A"
 
         )
-
 
         poster = (
 
@@ -1362,7 +1128,6 @@ async def search_tvmaze(
             )
 
         )
-
 
         cast = (
 
@@ -1376,9 +1141,7 @@ async def search_tvmaze(
 
         )
 
-
         actors = []
-
 
         for item in cast[:5]:
 
@@ -1387,23 +1150,19 @@ async def search_tvmaze(
                 {}
             )
 
-
             character = item.get(
                 "character",
                 {}
             )
 
-
             person_name = person.get(
                 "name"
             )
-
 
             character_name = character.get(
                 "name",
                 "Unknown"
             )
-
 
             if person_name:
 
@@ -1413,7 +1172,6 @@ async def search_tvmaze(
                     f"({character_name})"
 
                 )
-
 
         actors_text = (
 
@@ -1426,7 +1184,6 @@ async def search_tvmaze(
             else "N/A"
 
         )
-
 
         result = (
 
@@ -1447,7 +1204,6 @@ async def search_tvmaze(
             f"{official_url}"
 
         )
-
 
         if poster:
 
@@ -1475,13 +1231,11 @@ async def search_tvmaze(
 
             )
 
-
     except Exception:
 
         logging.exception(
             "TVmaze Error"
         )
-
 
         await update.message.reply_text(
 
@@ -1495,7 +1249,7 @@ async def search_tvmaze(
 
 
 # =========================================================
-# 🖼️ PHOTO
+# 🖼️ PHOTO MENU
 # =========================================================
 
 async def photo(
@@ -1505,27 +1259,233 @@ async def photo(
 
     user_id = update.effective_user.id
 
+    context.user_data[
+        "waiting_for_photo"
+    ] = True
 
     await update.message.reply_text(
 
-        "🖼️ Photo Tools\n\n"
+        "🖼️ Photo Enhancement ✨\n\n"
 
-        "عکس رو بفرست و بگو چه تغییری می‌خوای:\n\n"
+        "عکس رو بفرست تا کیفیتش رو افزایش بدم.\n\n"
 
-        "✨ افزایش کیفیت\n"
-        "🧹 حذف پس‌زمینه\n"
-        "🎨 تغییر سبک\n"
-        "💡 بهبود نور\n"
-        "🔍 افزایش جزئیات\n\n"
+        "🔍 افزایش جزئیات\n"
+        "✨ افزایش وضوح\n"
+        "📐 Upscale تصویر\n\n"
 
-        "⚠️ برای ویرایش واقعی تصویر باید "
-        "سرویس پردازش تصویر متصل شود.",
+        "⚠️ پردازش ممکنه چند لحظه طول بکشه.",
 
         reply_markup=main_keyboard(
             user_id
         )
 
     )
+
+
+# =========================================================
+# 🖼️ HUGGING FACE IMAGE ENHANCEMENT
+# =========================================================
+
+async def enhance_image(
+    update,
+    context
+):
+
+    user_id = update.effective_user.id
+
+    if not HF_TOKEN:
+
+        await update.message.reply_text(
+
+            "❌ HF_TOKEN تنظیم نشده.\n\n"
+            "ابتدا توکن Hugging Face رو در Variables پروژه قرار بده.",
+
+            reply_markup=main_keyboard(
+                user_id
+            )
+
+        )
+
+        return
+
+    temp_input = None
+
+    temp_output = None
+
+    try:
+
+        photo_file = update.message.photo[-1]
+
+        file_id = photo_file.file_id
+
+        telegram_file = await context.bot.get_file(
+            file_id
+        )
+
+        temp_input = (
+
+            f"/tmp/input_"
+            f"{user_id}_"
+            f"{random.randint(1000,9999)}.jpg"
+
+        )
+
+        temp_output = (
+
+            f"/tmp/output_"
+            f"{user_id}_"
+            f"{random.randint(1000,9999)}.jpg"
+
+        )
+
+        await telegram_file.download_to_drive(
+            custom_path=temp_input
+        )
+
+        await update.message.reply_text(
+
+            "✨ دارم کیفیت عکس رو افزایش می‌دم... 🔍🖼️",
+
+        )
+
+        with open(
+            temp_input,
+            "rb"
+        ) as image_file:
+
+            image_data = image_file.read()
+
+
+        # مدل Real-ESRGAN
+        api_url = (
+
+            "https://api-inference.huggingface.co/"
+            "models/caidas/swin2SR-classical-sr-x2-64"
+
+        )
+
+
+        headers = {
+
+            "Authorization":
+                f"Bearer {HF_TOKEN}",
+
+            "Content-Type":
+                "application/octet-stream"
+
+        }
+
+
+        response = requests.post(
+
+            api_url,
+
+            headers=headers,
+
+            data=image_data,
+
+            timeout=120
+
+        )
+
+
+        if response.status_code != 200:
+
+            logging.error(
+
+                "Hugging Face Error: %s %s",
+
+                response.status_code,
+
+                response.text[:500]
+
+            )
+
+            await update.message.reply_text(
+
+                "❌ سرویس افزایش کیفیت تصویر در دسترس نیست.\n\n"
+                f"Error: {response.status_code}",
+
+                reply_markup=main_keyboard(
+                    user_id
+                )
+
+            )
+
+            return
+
+
+        with open(
+            temp_output,
+            "wb"
+        ) as output_file:
+
+            output_file.write(
+                response.content
+            )
+
+
+        with open(
+            temp_output,
+            "rb"
+        ) as output_file:
+
+            await update.message.reply_document(
+
+                document=output_file,
+
+                filename="enhanced_image.jpg",
+
+                caption=(
+
+                    "✨ عکس با موفقیت پردازش شد! 🖼️🔥\n\n"
+                    "🔍 کیفیت و جزئیات افزایش پیدا کرد."
+
+                ),
+
+                reply_markup=main_keyboard(
+                    user_id
+                )
+
+            )
+
+
+    except Exception:
+
+        logging.exception(
+            "Image Enhancement Error"
+        )
+
+        await update.message.reply_text(
+
+            "❌ هنگام افزایش کیفیت عکس مشکلی پیش اومد.",
+
+            reply_markup=main_keyboard(
+                user_id
+            )
+
+        )
+
+    finally:
+
+        for file_path in [
+            temp_input,
+            temp_output
+        ]:
+
+            if file_path and os.path.exists(
+                file_path
+            ):
+
+                try:
+
+                    os.remove(
+                        file_path
+                    )
+
+                except Exception:
+
+                    pass
 
 
 # =========================================================
@@ -1539,20 +1499,11 @@ async def link(
 
     user_id = update.effective_user.id
 
-
     await update.message.reply_text(
 
         "🔗 Link Tools\n\n"
 
-        "لینک موردنظرت رو بفرست.\n\n"
-
-        "📱 شبکه‌های اجتماعی\n"
-        "🎵 موسیقی\n"
-        "🎬 ویدئو\n"
-        "📝 خلاصه‌سازی\n\n"
-
-        "⚠️ تحلیل کامل بعضی سایت‌ها "
-        "به سرویس مخصوص نیاز دارد.",
+        "لینک موردنظرت رو بفرست.",
 
         reply_markup=main_keyboard(
             user_id
@@ -1572,20 +1523,18 @@ async def smart_tools(
 
     user_id = update.effective_user.id
 
-
     await update.message.reply_text(
 
         "🧠 Smart Tools\n\n"
 
-        "📝 خلاصه‌سازی متن\n"
+        "📝 خلاصه‌سازی\n"
         "🌍 ترجمه\n"
         "💻 برنامه‌نویسی\n"
         "📚 کمک درسی\n"
         "🧮 حل مسئله\n"
-        "💡 ایده‌پردازی\n"
-        "✍️ نوشتن متن\n\n"
+        "💡 ایده‌پردازی\n\n"
 
-        "🤖 وارد AI Chat شو و درخواستت رو بنویس.",
+        "🤖 وارد AI Chat شو.",
 
         reply_markup=main_keyboard(
             user_id
@@ -1623,7 +1572,6 @@ async def settings(
 
     user_id = update.effective_user.id
 
-
     await update.message.reply_text(
 
         "⚙️ Settings\n\n"
@@ -1651,19 +1599,16 @@ async def about(
 
     user_id = update.effective_user.id
 
-
     await update.message.reply_text(
 
         "✨ Smart AI Assistant ✨\n\n"
 
-        "🤖 Powered by Groq\n"
+        "🤖 Groq AI\n"
         "🌍 Multi-language\n"
-        "🧠 AI Chat\n"
-        "📺 TVmaze Series Search\n"
-        "🎲 Truth or Dare\n"
         "🎵 AudD Music Recognition\n"
-        "🖼️ Photo Tools\n"
-        "🔗 Link Tools\n"
+        "📺 TVmaze Search\n"
+        "🖼️ Hugging Face Image Enhancement\n"
+        "🎲 Truth or Dare\n"
         "🔒 Private Mode\n\n"
 
         "🚀 More features coming soon!",
@@ -1686,29 +1631,21 @@ async def restart(
 
     user_id = update.effective_user.id
 
-
     ai_mode.discard(
         user_id
     )
-
 
     private_mode.discard(
         user_id
     )
 
-
     memory[user_id].clear()
-
 
     context.user_data.clear()
 
-
     await welcome(
-
         update,
-
         context
-
     )
 
 
@@ -1726,9 +1663,7 @@ async def handle_text(
     text = update.message.text.strip()
 
 
-    # =====================================================
-    # 🌍 LANGUAGE
-    # =====================================================
+    # LANGUAGE
 
     if text in LANGUAGES:
 
@@ -1740,7 +1675,6 @@ async def handle_text(
 
         memory[user_id].clear()
 
-
         await update.message.reply_text(
 
             "✅ Language updated successfully! 🌍",
@@ -1751,21 +1685,15 @@ async def handle_text(
 
         )
 
-
         await welcome(
-
             update,
-
             context
-
         )
 
         return
 
 
-    # =====================================================
-    # 🎬 TVMAZE SEARCH
-    # =====================================================
+    # TVMAZE
 
     if context.user_data.get(
         "waiting_for_show"
@@ -1779,9 +1707,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🤖 AI
-    # =====================================================
+    # AI
 
     if text == t(
         user_id,
@@ -1796,9 +1722,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🧠 TOOLS
-    # =====================================================
+    # TOOLS
 
     if text == t(
         user_id,
@@ -1813,9 +1737,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🎵 MUSIC
-    # =====================================================
+    # MUSIC
 
     if text == t(
         user_id,
@@ -1830,9 +1752,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🎬 MOVIE / SERIES
-    # =====================================================
+    # MOVIE
 
     if text == t(
         user_id,
@@ -1847,9 +1767,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🖼️ PHOTO
-    # =====================================================
+    # PHOTO
 
     if text == t(
         user_id,
@@ -1864,9 +1782,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🔗 LINK
-    # =====================================================
+    # LINK
 
     if text == t(
         user_id,
@@ -1881,9 +1797,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 👤 PROFILE
-    # =====================================================
+    # PROFILE
 
     if text == t(
         user_id,
@@ -1898,9 +1812,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🎲 GAME
-    # =====================================================
+    # GAME
 
     if text == t(
         user_id,
@@ -1915,9 +1827,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🔒 PRIVATE
-    # =====================================================
+    # PRIVATE
 
     if text == t(
         user_id,
@@ -1932,9 +1842,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🌍 LANGUAGE MENU
-    # =====================================================
+    # LANGUAGE MENU
 
     if text == t(
         user_id,
@@ -1949,9 +1857,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # ⚙️ SETTINGS
-    # =====================================================
+    # SETTINGS
 
     if text == t(
         user_id,
@@ -1966,9 +1872,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # ℹ️ ABOUT
-    # =====================================================
+    # ABOUT
 
     if text == t(
         user_id,
@@ -1983,9 +1887,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🔄 RESTART
-    # =====================================================
+    # RESTART
 
     if text == t(
         user_id,
@@ -2000,9 +1902,7 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # 🤖 AI CHAT
-    # =====================================================
+    # AI CHAT
 
     if user_id in ai_mode:
 
@@ -2014,10 +1914,6 @@ async def handle_text(
         return
 
 
-    # =====================================================
-    # DEFAULT
-    # =====================================================
-
     await update.message.reply_text(
 
         "👇 Please choose an option from the menu.",
@@ -2027,6 +1923,31 @@ async def handle_text(
         )
 
     )
+
+
+# =========================================================
+# 📸 HANDLE PHOTO
+# =========================================================
+
+async def handle_photo(
+    update,
+    context
+):
+
+    if context.user_data.get(
+        "waiting_for_photo"
+    ):
+
+        context.user_data[
+            "waiting_for_photo"
+        ] = False
+
+        await enhance_image(
+            update,
+            context
+        )
+
+        return
 
 
 # =========================================================
@@ -2050,22 +1971,19 @@ def main():
     )
 
 
-    # /start
+    # START
 
     app.add_handler(
 
         CommandHandler(
-
             "start",
-
             start
-
         )
 
     )
 
 
-    # 🎵 Audio Files
+    # MUSIC - AUDIO
 
     app.add_handler(
 
@@ -2080,7 +1998,7 @@ def main():
     )
 
 
-    # 🎙️ Voice Messages
+    # MUSIC - VOICE
 
     app.add_handler(
 
@@ -2095,14 +2013,28 @@ def main():
     )
 
 
-    # 💬 Text
+    # PHOTO
+
+    app.add_handler(
+
+        MessageHandler(
+
+            filters.PHOTO,
+
+            handle_photo
+
+        )
+
+    )
+
+
+    # TEXT
 
     app.add_handler(
 
         MessageHandler(
 
             filters.TEXT
-
             & ~filters.COMMAND,
 
             handle_text
@@ -2113,9 +2045,7 @@ def main():
 
 
     print(
-
         "🤖 Smart AI Assistant is running..."
-
     )
 
 
