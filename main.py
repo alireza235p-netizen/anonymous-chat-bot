@@ -1,5 +1,4 @@
 import logging
-import random
 import os
 
 from telegram import Update
@@ -16,7 +15,10 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 waiting_users = []
-active_chats = {}async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+active_chats = {}
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
     text = (
@@ -35,7 +37,9 @@ async def find(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if user_id in active_chats:
-        await update.message.reply_text("❗️شما همین الان داخل گفتگو هستید.")
+        await update.message.reply_text(
+            "❗️شما همین الان داخل گفتگو هستید."
+        )
         return
 
     if waiting_users and waiting_users[0] != user_id:
@@ -60,7 +64,10 @@ async def find(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             "⏳ در حال جستجوی مخاطب..."
-    )async def relay_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        )
+
+
+async def relay_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if user_id not in active_chats:
@@ -71,14 +78,18 @@ async def find(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.copy(chat_id=partner)
     except Exception:
-        await update.message.reply_text("❌ ارسال پیام انجام نشد.")
+        await update.message.reply_text(
+            "❌ ارسال پیام انجام نشد."
+        )
 
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if user_id not in active_chats:
-        await update.message.reply_text("❗️شما داخل هیچ گفتگویی نیستید.")
+        await update.message.reply_text(
+            "❗️شما داخل هیچ گفتگویی نیستید."
+        )
         return
 
     partner = active_chats[user_id]
@@ -87,17 +98,37 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if partner in active_chats:
         del active_chats[partner]
+
         await context.bot.send_message(
             partner,
             "🔚 طرف مقابل گفتگو را قطع کرد."
         )
 
-    await update.message.reply_text("✅ گفتگو پایان یافت.")
+    await update.message.reply_text(
+        "✅ گفتگو پایان یافت."
+    )
 
 
 async def next_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await stop(update, context)
-    await find(update, context)def main():
+    user_id = update.effective_user.id
+
+    if user_id in active_chats:
+        partner = active_chats[user_id]
+
+        del active_chats[user_id]
+
+        if partner in active_chats:
+            del active_chats[partner]
+
+            await context.bot.send_message(
+                partner,
+                "🔚 طرف مقابل گفتگو را قطع کرد."
+            )
+
+    await find(update, context)
+
+
+def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -106,10 +137,14 @@ async def next_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     app.add_handler(CommandHandler("next", next_chat))
 
     app.add_handler(
-        MessageHandler(filters.ALL & ~filters.COMMAND, relay_message)
+        MessageHandler(
+            filters.ALL & ~filters.COMMAND,
+            relay_message
+        )
     )
 
     print("Bot is running...")
+
     app.run_polling()
 
 
